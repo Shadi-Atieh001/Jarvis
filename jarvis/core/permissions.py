@@ -52,7 +52,10 @@ class PermissionGate:
 
         configured = self.settings.tool_tiers.get(tool.name)
         tier = configured or tool.tier or self.settings.default_tier
-        reason = "settings.toml" if configured else "tool default"
+        if configured:
+            reason = f'{tool.name} is set to "{tier}" in settings.toml'
+        else:
+            reason = f'{tool.name} is "{tier}" by default'
         if tier not in TIER_ORDER:
             # A typo in settings.toml must fail safe, not open.
             tier, reason = CONFIRM, f"settings.toml has an unknown tier {tier!r}"
