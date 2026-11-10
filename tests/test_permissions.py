@@ -1,3 +1,5 @@
+import pytest
+
 from jarvis.core.permissions import PermissionGate
 from jarvis.core.tools import AUTO, BLOCKED, CONFIRM
 
@@ -45,7 +47,11 @@ def test_symlink_cannot_disguise_an_outside_path(settings, registry, ctx, tmp_pa
     gate = PermissionGate(settings)
     outside = tmp_path / "outside"
     outside.mkdir()
-    (ctx.workspace / "link").symlink_to(outside, target_is_directory=True)
+    try:
+        (ctx.workspace / "link").symlink_to(outside, target_is_directory=True)
+    except OSError:
+        # Windows only lets administrators (or Developer Mode) create symlinks.
+        pytest.skip("this account cannot create symlinks")
     assert tier(gate, registry, ctx, "write_file", {"path": "link/x.txt", "content": "x"}) == CONFIRM
 
 
