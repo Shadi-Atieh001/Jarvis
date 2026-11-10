@@ -3,7 +3,8 @@
 A personal AI assistant that runs on your own machine and acts on your behalf,
 with a permission system that decides what it may do without asking.
 
-**Status: Phase 1 of 5.** Chat, the agent loop, file/shell/code tools,
+**Status: Phase 1 of 5.** It runs free on a local model through Ollama, or
+on Claude through the Anthropic API. Chat, the agent loop, file/shell/code tools,
 permissions, the action log and the emergency stop are built. Memory,
 integrations (Gmail, Calendar, Notion, Spotify, GitHub, WhatsApp),
 scheduling and voice come next; see [Roadmap](#roadmap).
@@ -30,15 +31,47 @@ scheduling and voice come next; see [Roadmap](#roadmap).
    If PowerShell refuses to run `Activate.ps1`, use `.venv\Scripts\activate.bat`
    from Command Prompt instead.
 
-4. Give JARVIS your Anthropic API key. This stores it in your Windows user
-   environment, not in any file in this folder:
+4. Choose a brain (next section).
+
+## Choosing a brain
+
+`provider` in `settings.toml` decides which model JARVIS thinks with.
+
+### Free: a local model with Ollama (the default)
+
+1. Install Ollama from <https://ollama.com/download> and let it start.
+2. Download a model that supports tool calling (about 5 GB):
 
    ```powershell
-   setx ANTHROPIC_API_KEY "your-key-here"
+   ollama pull qwen3:8b
    ```
 
-   Close PowerShell and open a new one so the key is picked up, then
-   `cd Jarvis` and `.venv\Scripts\Activate.ps1` again.
+3. Start JARVIS. Nothing leaves your computer and there is no cost.
+
+To use a different model, pull it and change `model` under `[ollama]` in
+`settings.toml`. Larger models are noticeably more reliable if your graphics
+card has the memory. Models that support tools are listed at
+<https://ollama.com/search?c=tool>.
+
+What to expect from a small local model: it is fine for conversation and
+simple one- or two-step tasks, but it will sometimes pick the wrong tool,
+leave out an argument, or lose the thread on longer jobs. The permission
+gate applies to it exactly as it does to Claude, so a mistake still cannot
+overwrite, delete or run anything without your yes. Small models are also
+easier to fool with instructions hidden in files, which is one more reason
+to read confirmation prompts before approving.
+
+### Paid: Claude through the Anthropic API
+
+Set `provider = "anthropic"` in `settings.toml`, then store your API key in
+your Windows user environment (not in any file in this folder):
+
+```powershell
+setx ANTHROPIC_API_KEY "your-key-here"
+```
+
+Open a new terminal so the key is picked up. This uses `claude-fable-5-2`
+and is billed per use by Anthropic.
 
 ## Running
 
@@ -118,6 +151,7 @@ jarvis/
   app.py             builds a Jarvis from settings
   core/
     agent.py         the agent loop
+    brains.py        the model backends: Anthropic and Ollama
     permissions.py   the permission gate
     tools.py         tool definitions and the plugin loader
     persona.py       the system prompt (personality and rules)
@@ -164,6 +198,9 @@ asking permission), `blockable_text` (text checked against blocked patterns).
 
 ## Decisions you may need to understand
 
+- **Two brains, one loop.** `brains.py` holds both backends. The history is
+  kept in Anthropic's message format and translated for Ollama on each
+  request, so everything else (permissions, logging, tools) is shared.
 - **The API key** is read from `ANTHROPIC_API_KEY` by the Anthropic library.
   JARVIS never stores it, and the log scrubs it.
 - **The conversation history is append-only.** The model verifies that

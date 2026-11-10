@@ -19,12 +19,20 @@ def build(settings_path: Path | None = None, client=None) -> Jarvis:
     return Jarvis(settings, load_tools(), log, kill, client=client)
 
 
-def api_key_problem() -> str | None:
-    """Returns a message if the API key is missing, else None."""
+def startup_problem(settings: Settings | None = None) -> str | None:
+    """Returns a message if the chosen brain cannot run, else None."""
+    settings = settings or load_settings()
+    if settings.provider == "ollama":
+        from jarvis.core.brains import OllamaBrain
+
+        return OllamaBrain(settings).check()
+    if settings.provider != "anthropic":
+        return f'Unknown provider {settings.provider!r} in settings.toml. Use "anthropic" or "ollama".'
     if os.environ.get("ANTHROPIC_API_KEY"):
         return None
     return (
-        "ANTHROPIC_API_KEY is not set. In PowerShell, set it once with:\n"
+        "ANTHROPIC_API_KEY is not set. In Command Prompt or PowerShell, set it once with:\n"
         '  setx ANTHROPIC_API_KEY "your-key-here"\n'
-        "then open a new terminal and start JARVIS again."
+        "then open a new terminal and start JARVIS again.\n"
+        'To run free on a local model instead, set provider = "ollama" in settings.toml.'
     )

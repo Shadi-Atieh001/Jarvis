@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import sys
 
-from jarvis.app import api_key_problem, build
+from jarvis.app import build, startup_problem
 from jarvis.core.actionlog import ActionLog, format_entries
 from jarvis.core.config import load_settings
 from jarvis.core.killswitch import KillSwitch
@@ -44,7 +44,7 @@ def main(argv: list[str] | None = None) -> int:
         print(__doc__)
         return 0 if command in ("help", "-h", "--help") else 2
 
-    problem = api_key_problem()
+    problem = startup_problem()
     if problem:
         print(problem)
         return 1

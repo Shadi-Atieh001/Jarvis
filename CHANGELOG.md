@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.0 — Free local model (2026-11-10)
+
+Added
+- Ollama backend: JARVIS can run on a model on your own machine at no cost.
+  Choose with `provider = "ollama"` or `"anthropic"` in `settings.toml`;
+  local settings live under `[ollama]`.
+- Startup checks that explain what is missing (Ollama not running, model
+  not downloaded, model cannot call tools, API key not set).
+
+Changed
+- `provider` now defaults to `"ollama"` in the shipped `settings.toml`.
+- Model access moved out of the agent loop into `jarvis/core/brains.py`.
+
+Not yet verified: the Ollama backend is tested against a stand-in server
+that follows Ollama's documented API, not against a real Ollama install.
+
 ## 0.1.0 — Phase 1: core (2026-11-10)
 
 Added

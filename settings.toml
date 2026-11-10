@@ -4,6 +4,12 @@
 
 [assistant]
 address_as = "Sir"
+# Which brain to use:
+#   "ollama"     a free model running on this computer (see [ollama] below)
+#   "anthropic"  Claude through the Anthropic API: far more capable, paid,
+#                needs the ANTHROPIC_API_KEY environment variable
+provider = "ollama"
+# The settings from here to max_steps apply to "anthropic" only.
 model = "claude-fable-5-2"
 # How hard the model thinks: low | medium | high | xhigh | max.
 # Higher is slower and costs more. "medium" suits everyday requests.
@@ -14,6 +20,16 @@ refusal_fallback = true
 # Safety cap on tool calls per request, so a confused loop cannot run forever.
 max_steps = 40
 location = "Sharjah"
+
+[ollama]
+# Any Ollama model that supports tool calling: https://ollama.com/search?c=tool
+# Download it first with:  ollama pull qwen3:8b
+# Bigger models are more reliable but need more graphics memory (VRAM):
+# roughly 6 GB for an 8b model, 10 GB for 14b, 20 GB for 30b+.
+model = "qwen3:8b"
+host = "http://127.0.0.1:11434"
+# How much conversation the model can hold, in tokens. Larger uses more memory.
+context_window = 16384
 
 [paths]
 # Where JARVIS keeps its data (action log, stop flag, later: memory).

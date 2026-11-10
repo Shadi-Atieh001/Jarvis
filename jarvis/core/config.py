@@ -26,6 +26,11 @@ class Settings:
     max_steps: int = 40
     location: str = "Sharjah"
 
+    provider: str = "anthropic"  # "anthropic" or "ollama"
+    ollama_model: str = "qwen3:8b"
+    ollama_host: str = "http://127.0.0.1:11434"
+    ollama_context_window: int = 16384
+
     home: Path = Path("~/.jarvis")
     workspace: Path = Path("~/.jarvis/workspace")
 
@@ -61,9 +66,14 @@ def load_settings(path: Path | None = None) -> Settings:
     perms = data.get("permissions", {})
 
     s = Settings()
-    for key in ("address_as", "model", "effort", "refusal_fallback", "max_steps", "location"):
+    for key in ("address_as", "provider", "model", "effort", "refusal_fallback", "max_steps", "location"):
         if key in assistant:
             setattr(s, key, assistant[key])
+
+    ollama = data.get("ollama", {})
+    s.ollama_model = ollama.get("model", s.ollama_model)
+    s.ollama_host = ollama.get("host", s.ollama_host)
+    s.ollama_context_window = ollama.get("context_window", s.ollama_context_window)
 
     s.home = _expand(paths.get("home", s.home))
     s.workspace = _expand(paths.get("workspace", s.workspace))

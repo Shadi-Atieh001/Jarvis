@@ -16,15 +16,14 @@ from typing import Any, Protocol
 import jsonschema
 
 from .actionlog import ActionLog
+from .brains import make_brain
 from .config import Settings
 from .killswitch import KillSwitch, Stopped
 from .permissions import Decision, PermissionGate
 from .persona import build_system_prompt
 from .tools import AUTO, BLOCKED, CONFIRM, ToolContext, ToolRegistry, ToolResult
 
-MAX_TOKENS = 32000
 MAX_RESULT_CHARS = 60000  # tool output beyond this is cut, with a note
-FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
 
 class UI(Protocol):
@@ -52,17 +51,7 @@ class Jarvis:
         self.ctx = ToolContext(settings=settings, kill=kill)
         self.system_prompt = build_system_prompt(settings)
         self.messages: list[dict] = []
-        self._client = client
-
-    @property
-    def client(self):
-        if self._client is None:
-            import anthropic
-
-            # Reads ANTHROPIC_API_KEY from the environment. The key is never
-            # passed around, stored or logged by JARVIS.
-            self._client = anthropic.Anthropic()
-        return self._client
+        self.brain = make_brain(settings, client)
 
     def clear(self) -> None:
         self.messages = []
@@ -146,32 +135,9 @@ class Jarvis:
     # ----------------------------------------------------------------- model
 
     def _call_model(self, ui: UI):
-        request: dict[str, Any] = dict(
-            model=self.settings.model,
-            max_tokens=MAX_TOKENS,
-            system=self.system_prompt,
-            tools=self.registry.api_definitions(),
-            messages=self.messages,
-            output_config={"effort": self.settings.effort},
-            cache_control={"type": "ephemeral"},  # reuse the unchanged prefix
+        return self.brain.respond(
+            self.system_prompt, self.registry.api_definitions(), self.messages, ui.on_text, self.kill
         )
-        if self.settings.refusal_fallback:
-            request["betas"] = [FALLBACK_BETA]
-            request["fallbacks"] = "default"
-
-        last_error: Exception | None = None
-        for _attempt in range(2):
-            try:
-                with self.client.beta.messages.stream(**request) as stream:
-                    for delta in stream.text_stream:
-                        self.kill.check()
-                        ui.on_text(delta)
-                    return stream.get_final_message()
-            except ValueError as exc:
-                # The SDK raises ValueError when a streamed tool input is not
-                # valid JSON. Ask again once; API errors are not caught here.
-                last_error = exc
-        raise RuntimeError(f"The model sent malformed tool input twice: {last_error}")
 
     # ----------------------------------------------------------------- tools
 

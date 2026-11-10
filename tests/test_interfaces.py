@@ -35,7 +35,10 @@ def test_cli_stop_resume_log(settings, monkeypatch, capsys, tmp_path):
     assert "kill_switch" in capsys.readouterr().out
 
 
-def test_cli_refuses_to_start_without_key(monkeypatch, capsys):
+def test_cli_refuses_to_start_without_key(settings, monkeypatch, capsys, tmp_path):
+    cfg = tmp_path / "s.toml"
+    cfg.write_text(f'[assistant]\nprovider = "anthropic"\n[paths]\nhome = "{settings.home.as_posix()}"\n')
+    monkeypatch.setenv("JARVIS_SETTINGS", str(cfg))
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     assert main(["chat"]) == 1
     assert "ANTHROPIC_API_KEY" in capsys.readouterr().out
