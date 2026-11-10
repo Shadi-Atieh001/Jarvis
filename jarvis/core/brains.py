@@ -99,6 +99,7 @@ class OllamaBrain:
     def __init__(self, settings: Settings):
         self.settings = settings
         self.host = settings.ollama_host.rstrip("/")
+        self.last_stats: str | None = None  # timings of the latest reply
 
     def respond(self, system: str, tools: list[dict], messages: list[dict], on_text: Callable[[str], None], kill: KillSwitch):
         body = {
@@ -115,10 +116,26 @@ class OllamaBrain:
             # Ollama's default context window is small; the system prompt and
             # tool list alone would nearly fill it.
             "options": {"num_ctx": self.settings.ollama_context_window},
+            # Keep the model in memory between messages so it need not reload.
+            "keep_alive": self.settings.ollama_keep_alive,
+            # Many local models "think" silently before answering, which can
+            # add tens of seconds. Off by default; see settings.toml.
+            "think": self.settings.ollama_think,
         }
+        try:
+            return self._chat(body, on_text, kill)
+        except BrainError as exc:
+            if "think" not in str(exc).lower():
+                raise
+            # This model has no thinking mode at all; ask again without it.
+            del body["think"]
+            return self._chat(body, on_text, kill)
+
+    def _chat(self, body: dict, on_text: Callable[[str], None], kill: KillSwitch):
         text_parts: list[str] = []
         calls: list[SimpleNamespace] = []
         done_reason = "stop"
+        self.last_stats = None
 
         with self._post("/api/chat", body) as response:
             for line in response:  # one JSON object per line
@@ -150,6 +167,7 @@ class OllamaBrain:
                     )
                 if chunk.get("done"):
                     done_reason = chunk.get("done_reason") or "stop"
+                    self.last_stats = _timings(chunk)
 
         content: list = []
         if text_parts:
@@ -212,6 +230,20 @@ class OllamaBrain:
         if wanted not in installed:
             return f"Ollama is running but does not have the model {model!r}. Download it with:\n  ollama pull {model}"
         return None
+
+
+def _timings(chunk: dict) -> str:
+    """Summarise Ollama's timing figures (reported in nanoseconds)."""
+    def seconds(key):
+        return (chunk.get(key) or 0) / 1e9
+
+    out_tokens, out_time = chunk.get("eval_count") or 0, seconds("eval_duration")
+    speed = f"{out_tokens / out_time:.0f} tokens/s" if out_time else "n/a"
+    return (
+        f"total {seconds('total_duration'):.1f}s: load {seconds('load_duration'):.1f}s, "
+        f"read prompt {seconds('prompt_eval_duration'):.1f}s ({chunk.get('prompt_eval_count') or 0} tokens), "
+        f"write {out_time:.1f}s ({out_tokens} tokens, {speed})"
+    )
 
 
 def to_ollama_messages(messages: list[dict]) -> list[dict]:

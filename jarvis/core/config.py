@@ -29,7 +29,9 @@ class Settings:
     provider: str = "anthropic"  # "anthropic" or "ollama"
     ollama_model: str = "qwen3:8b"
     ollama_host: str = "http://127.0.0.1:11434"
-    ollama_context_window: int = 16384
+    ollama_context_window: int = 8192
+    ollama_think: bool = False
+    ollama_keep_alive: str = "30m"
 
     home: Path = Path("~/.jarvis")
     workspace: Path = Path("~/.jarvis/workspace")
@@ -74,6 +76,8 @@ def load_settings(path: Path | None = None) -> Settings:
     s.ollama_model = ollama.get("model", s.ollama_model)
     s.ollama_host = ollama.get("host", s.ollama_host)
     s.ollama_context_window = ollama.get("context_window", s.ollama_context_window)
+    s.ollama_think = ollama.get("think", s.ollama_think)
+    s.ollama_keep_alive = ollama.get("keep_alive", s.ollama_keep_alive)
 
     s.home = _expand(paths.get("home", s.home))
     s.workspace = _expand(paths.get("workspace", s.workspace))

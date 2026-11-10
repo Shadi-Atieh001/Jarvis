@@ -83,7 +83,8 @@ def test_plain_reply_streams(jarvis, ollama):
     assert jarvis.send("hello", ui) == "done"
     assert ui.text == "Good evening, Sir."
     req = ollama.requests[0]
-    assert req["model"] == "qwen3:8b" and req["options"]["num_ctx"] == 16384
+    assert req["model"] == "qwen3:8b" and req["options"]["num_ctx"] == 8192
+    assert req["think"] is False and req["keep_alive"] == "30m"
     assert req["messages"][0]["role"] == "system" and "JARVIS" in req["messages"][0]["content"]
     assert req["tools"][0]["type"] == "function" and "parameters" in req["tools"][0]["function"]
 
@@ -131,6 +132,23 @@ def test_sloppy_arguments_are_rejected_not_run(jarvis, ollama):
     assert ui.tools == [("write_file", "auto")]
     assert not (jarvis.settings.workspace / "b.txt").exists()
     assert "Invalid input" in ollama.requests[3]["messages"][-1]["content"]
+
+
+def test_model_without_thinking_mode_is_retried(jarvis, ollama):
+    ollama.script = [(400, {"error": '"llama3.1" does not support thinking'}), says("Hello.")]
+    ui = FakeUI()
+    assert jarvis.send("hi", ui) == "done" and ui.text == "Hello."
+    assert "think" not in ollama.requests[1]
+
+
+def test_timings_are_logged(jarvis, ollama):
+    done = {"message": {"role": "assistant", "content": ""}, "done": True, "done_reason": "stop",
+            "total_duration": 31_000_000_000, "load_duration": 9_000_000_000, "prompt_eval_count": 2100,
+            "prompt_eval_duration": 4_000_000_000, "eval_count": 360, "eval_duration": 18_000_000_000}
+    ollama.script = [[{"message": {"role": "assistant", "content": "Hi."}, "done": False}, done]]
+    jarvis.send("hi", FakeUI())
+    entry = [e for e in jarvis.log.tail(5) if e["event"] == "model"][0]
+    assert "total 31.0s" in entry["detail"] and "20 tokens/s" in entry["detail"] and "2100 tokens" in entry["detail"]
 
 
 def test_length_cutoff(jarvis, ollama):

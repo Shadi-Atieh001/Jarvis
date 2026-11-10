@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.1 — Faster local replies (2026-11-10)
+
+Changed
+- Local models no longer "think" silently before each answer (`think` under
+  `[ollama]`), stay loaded for 30 minutes between messages (`keep_alive`),
+  and use a smaller default context window (8192) so they are more likely
+  to fit on the graphics card.
+- Each local reply's timings are written to the action log; see `/log`.
+
 ## 0.2.0 — Free local model (2026-11-10)
 
 Added

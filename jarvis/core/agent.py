@@ -91,6 +91,9 @@ class Jarvis:
         for _ in range(self.settings.max_steps):
             self.kill.check()
             response = self._call_model(ui)
+            stats = getattr(self.brain, "last_stats", None)
+            if stats:  # local models report timings; handy when it feels slow
+                self.log.record("model", detail=stats)
             self.messages.append({"role": "assistant", "content": response.content})
 
             tool_calls = [b for b in response.content if b.type == "tool_use"]

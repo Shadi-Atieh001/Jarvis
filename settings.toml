@@ -28,8 +28,15 @@ location = "Sharjah"
 # roughly 6 GB for an 8b model, 10 GB for 14b, 20 GB for 30b+.
 model = "qwen3:8b"
 host = "http://127.0.0.1:11434"
-# How much conversation the model can hold, in tokens. Larger uses more memory.
-context_window = 16384
+# How much conversation the model can hold, in tokens. Larger holds longer
+# conversations but uses more graphics memory; if the model no longer fits
+# on the graphics card it spills onto the processor and becomes very slow.
+context_window = 8192
+# Let the model reason silently before answering. Better on hard tasks, but
+# can add tens of seconds to every reply.
+think = false
+# How long the model stays loaded after the last message.
+keep_alive = "30m"
 
 [paths]
 # Where JARVIS keeps its data (action log, stop flag, later: memory).
