@@ -1,0 +1,78 @@
+# JARVIS settings. Edit freely; restart JARVIS to apply.
+# The API key is NOT stored here. It is read from the ANTHROPIC_API_KEY
+# environment variable only.
+
+[assistant]
+address_as = "Sir"
+model = "claude-fable-5-2"
+# How hard the model thinks: low | medium | high | xhigh | max.
+# Higher is slower and costs more. "medium" suits everyday requests.
+effort = "medium"
+# If the model's safety filters decline a request, let Anthropic retry it on
+# another model automatically. Set to false to simply report the refusal.
+refusal_fallback = true
+# Safety cap on tool calls per request, so a confused loop cannot run forever.
+max_steps = 40
+location = "Sharjah"
+
+[paths]
+# Where JARVIS keeps its data (action log, stop flag, later: memory).
+home = "~/.jarvis"
+# The sandbox folder. JARVIS may create files here without asking.
+workspace = "~/.jarvis/workspace"
+
+[permissions]
+# Tier used for any tool that is not listed below and declares none itself.
+default = "confirm"
+# After JARVIS reads untrusted content (files outside the workspace, and later
+# web pages and email), every action that changes anything needs your "yes"
+# for the rest of that request, even if it is normally automatic.
+confirm_after_untrusted = true
+
+# Per-tool tiers: "auto" | "confirm" | "blocked".
+# A tool can still escalate above its tier for a risky call (for example,
+# write_file is "auto" but asks before overwriting or writing outside the
+# workspace). You can make any tool stricter here. Making run_command or
+# run_python "auto" means JARVIS can execute arbitrary code without asking.
+[permissions.tools]
+read_file = "auto"
+list_dir = "auto"
+search_files = "auto"
+write_file = "auto"
+make_dir = "auto"
+move_file = "auto"
+delete_file = "confirm"
+run_command = "confirm"
+run_python = "confirm"
+
+[permissions.sensitive]
+# Reading anything matching these patterns needs confirmation.
+paths = [
+    "**/.ssh/**", "**/.aws/**", "**/.gnupg/**", "**/.azure/**", "**/.kube/**",
+    "**/.env", "**/.env.*", "**/*.pem", "**/*.key", "**/*.pfx", "**/*.kdbx",
+    "**/id_rsa*", "**/id_ed25519*", "**/.netrc", "**/.git-credentials",
+    "**/AppData/Local/Google/Chrome/User Data/**",
+    "**/AppData/Local/Microsoft/Edge/User Data/**",
+    "**/AppData/Roaming/Mozilla/Firefox/Profiles/**",
+    "**/AppData/Roaming/Microsoft/Credentials/**",
+    "**/AppData/Roaming/Microsoft/Protect/**",
+]
+
+[permissions.blocked]
+# Commands or code matching any of these (case-insensitive regex) are refused
+# outright: system security settings, credential stores, disk destruction.
+# This list is a backstop, not a guarantee; the real protection is that every
+# command needs your "yes".
+patterns = [
+    'netsh\s+advfirewall', 'Set-NetFirewall', 'Disable-NetFirewallRule',
+    'Set-MpPreference', 'Add-MpPreference', 'Uninstall-WindowsFeature.*Defender',
+    'Set-ExecutionPolicy', 'bcdedit', 'manage-bde', 'Disable-BitLocker',
+    'EnableLUA', 'ConsentPromptBehaviorAdmin',
+    'net\s+(user|localgroup)\s', 'New-LocalUser', 'Add-LocalGroupMember',
+    'reg(\.exe)?\s+(add|delete)\s+.*\\(Policies|Lsa|SecurityProviders)',
+    'cmdkey', 'vaultcmd', 'mimikatz',
+    'format\s+[a-z]:', 'diskpart', 'cipher\s+/w', 'Clear-Disk', 'Format-Volume',
+    'ufw\s+disable', 'setenforce\s+0', 'iptables\s+-F', 'csrutil\s+disable',
+    'spctl\s+--master-disable', 'mkfs\.', 'dd\s+.*of=/dev/',
+    'rm\s+-[a-z]*r[a-z]*f?[a-z]*\s+(/|~|\$HOME)(\s|$)',
+]
