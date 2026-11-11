@@ -61,6 +61,26 @@ overwrite, delete or run anything without your yes. Small models are also
 easier to fool with instructions hidden in files, which is one more reason
 to read confirmation prompts before approving.
 
+### A hosted service with its own key (OpenAI-compatible)
+
+Many model services (OpenRouter, Groq, Together and others) use the OpenAI
+"chat completions" format. To use one:
+
+1. In `settings.toml` set `provider = "openai_compatible"`, then under
+   `[openai_compatible]` fill in `base_url` (from the service's API
+   documentation, ending in `/v1`) and `model`. The model must support tool
+   calling.
+2. Store the key in your Windows user environment, never in a file:
+
+   ```powershell
+   setx JARVIS_API_KEY "your-key-here"
+   ```
+
+3. Open a new terminal and start JARVIS.
+
+With this option your messages, and any file contents JARVIS reads, are sent
+to that service.
+
 ### Paid: Claude through the Anthropic API
 
 Set `provider = "anthropic"` in `settings.toml`, then store your API key in
@@ -151,7 +171,7 @@ jarvis/
   app.py             builds a Jarvis from settings
   core/
     agent.py         the agent loop
-    brains.py        the model backends: Anthropic and Ollama
+    brains.py        the model backends: Anthropic, Ollama, OpenAI-compatible
     permissions.py   the permission gate
     tools.py         tool definitions and the plugin loader
     persona.py       the system prompt (personality and rules)

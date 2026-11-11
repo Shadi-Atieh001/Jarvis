@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0 — Hosted services (2026-11-11)
+
+Added
+- `provider = "openai_compatible"`: use any hosted model service that speaks
+  the OpenAI chat format. Configure `base_url` and `model` under
+  `[openai_compatible]`; the key is read from the `JARVIS_API_KEY`
+  environment variable. Refuses to send a key over plain http.
+- The action log now scrubs the value of every environment variable whose
+  name ends in `_API_KEY`, `_TOKEN` or `_SECRET`.
+
+Not yet verified against a real service; tested with a stand-in server.
+
 ## 0.2.1 — Faster local replies (2026-11-10)
 
 Changed

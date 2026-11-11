@@ -1,6 +1,6 @@
 [project]
 name = "jarvis"
-version = "0.2.1"
+version = "0.3.0"
 description = "A personal AI assistant that runs on your own machine."
 requires-python = ">=3.13"
 dependencies = [

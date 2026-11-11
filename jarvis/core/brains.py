@@ -3,6 +3,8 @@ does not care which.
 
   AnthropicBrain   Claude through the Anthropic API (paid, most capable)
   OllamaBrain      a model running on this machine through Ollama (free)
+  OpenAICompatBrain  any hosted service that speaks the OpenAI chat format
+                   (most do: OpenRouter, Groq, Together, and many others)
 
 Both take the same conversation history and return a Reply: a list of
 content blocks (text and tool calls) plus a stop reason. The history is kept
@@ -14,6 +16,7 @@ Choose one with `provider` in settings.toml.
 from __future__ import annotations
 
 import json
+import os
 import urllib.error
 import urllib.request
 import uuid
@@ -276,9 +279,148 @@ def to_ollama_messages(messages: list[dict]) -> list[dict]:
     return out
 
 
+# -------------------------------------------------------- OpenAI-compatible
+
+
+class OpenAICompatBrain:
+    """Talks to any service offering the OpenAI "chat completions" API.
+    The key is read from the environment variable named in settings.toml
+    (api_key_env); it is never stored in a file."""
+
+    name = "openai_compatible"
+
+    def __init__(self, settings: Settings):
+        self.settings = settings
+        self.base_url = settings.compat_base_url.rstrip("/")
+
+    def _key(self) -> str:
+        return os.environ.get(self.settings.compat_api_key_env, "")
+
+    def check(self) -> str | None:
+        if not self.base_url or not self.settings.compat_model:
+            return "Set base_url and model under [openai_compatible] in settings.toml."
+        if not self.base_url.startswith("https://") and "//localhost" not in self.base_url and "//127.0.0.1" not in self.base_url:
+            return "base_url under [openai_compatible] must start with https:// so your key is not sent unencrypted."
+        if not self._key():
+            env = self.settings.compat_api_key_env
+            return (
+                f"{env} is not set. Store your key once with:\n"
+                f'  setx {env} "your-key-here"\n'
+                "then open a new terminal and start JARVIS again."
+            )
+        return None
+
+    def respond(self, system: str, tools: list[dict], messages: list[dict], on_text: Callable[[str], None], kill: KillSwitch):
+        body = {
+            "model": self.settings.compat_model,
+            "messages": [{"role": "system", "content": system}, *to_openai_messages(messages)],
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {"name": t["name"], "description": t["description"], "parameters": t["input_schema"]},
+                }
+                for t in tools
+            ],
+            "stream": True,
+        }
+        request = urllib.request.Request(
+            self.base_url + "/chat/completions",
+            data=json.dumps(body).encode("utf-8"),
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {self._key()}"},
+        )
+        try:
+            response = urllib.request.urlopen(request, timeout=600)
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")[:500]
+            hint = {
+                401: " The key was rejected; check it is correct and still valid.",
+                403: " The key is not allowed to use this model.",
+                404: " Check base_url and model in settings.toml.",
+                429: " The service's rate or usage limit was reached; wait and try again.",
+            }.get(exc.code, "")
+            raise BrainError(f"The model service returned an error ({exc.code}).{hint}\n{detail}") from None
+        except urllib.error.URLError as exc:
+            raise BrainError(f"Cannot reach {self.base_url} ({exc.reason}). Check base_url and your connection.") from None
+
+        text_parts: list[str] = []
+        partial: dict[int, dict] = {}  # tool calls arrive in pieces, keyed by index
+        finish = "stop"
+        with response:
+            for raw in response:  # server-sent events: lines of "data: {json}"
+                kill.check()
+                line = raw.decode("utf-8", errors="replace").strip()
+                if not line.startswith("data:"):
+                    continue
+                payload = line[5:].strip()
+                if payload == "[DONE]":
+                    break
+                chunk = json.loads(payload)
+                if chunk.get("error"):
+                    raise BrainError(f"The model service reported an error: {chunk['error']}")
+                for choice in chunk.get("choices") or []:
+                    delta = choice.get("delta") or {}
+                    if delta.get("content"):
+                        text_parts.append(delta["content"])
+                        on_text(delta["content"])
+                    for tc in delta.get("tool_calls") or []:
+                        slot = partial.setdefault(tc.get("index", 0), {"id": "", "name": "", "arguments": ""})
+                        fn = tc.get("function") or {}
+                        slot["id"] = tc.get("id") or slot["id"]
+                        slot["name"] += fn.get("name") or ""
+                        slot["arguments"] += fn.get("arguments") or ""
+                    if choice.get("finish_reason"):
+                        finish = choice["finish_reason"]
+
+        content: list = []
+        if text_parts:
+            content.append(SimpleNamespace(type="text", text="".join(text_parts)))
+        for index in sorted(partial):
+            slot = partial[index]
+            try:
+                args = json.loads(slot["arguments"] or "{}")
+            except json.JSONDecodeError:
+                args = {"_unparseable": slot["arguments"]}  # fails validation, model is told
+            content.append(
+                SimpleNamespace(type="tool_use", id=slot["id"] or f"call_{uuid.uuid4().hex[:12]}", name=slot["name"], input=args)
+            )
+        if finish == "length":
+            stop = "max_tokens"
+        elif finish == "content_filter":
+            stop = "refusal"
+        else:
+            stop = "tool_use" if partial else "end_turn"
+        return Reply(content, stop)
+
+
+def to_openai_messages(messages: list[dict]) -> list[dict]:
+    """Translate the Anthropic-format history into OpenAI's chat format."""
+    out: list[dict] = []
+    for msg in messages:
+        content = msg["content"]
+        if isinstance(content, str):
+            out.append({"role": msg["role"], "content": content})
+        elif msg["role"] == "assistant":
+            text = "".join(b.text for b in content if getattr(b, "type", None) == "text")
+            calls = [b for b in content if getattr(b, "type", None) == "tool_use"]
+            entry: dict = {"role": "assistant", "content": text or None}
+            if calls:
+                entry["tool_calls"] = [
+                    {"id": c.id, "type": "function", "function": {"name": c.name, "arguments": json.dumps(c.input)}}
+                    for c in calls
+                ]
+            out.append(entry)
+        else:
+            for block in content:
+                if block.get("type") == "tool_result":
+                    out.append({"role": "tool", "tool_call_id": block.get("tool_use_id"), "content": str(block.get("content", ""))})
+    return out
+
+
 def make_brain(settings: Settings, client: Any = None):
     if client is not None or settings.provider == "anthropic":
         return AnthropicBrain(settings, client)
     if settings.provider == "ollama":
         return OllamaBrain(settings)
-    raise BrainError(f"Unknown provider {settings.provider!r} in settings.toml. Use \"anthropic\" or \"ollama\".")
+    if settings.provider == "openai_compatible":
+        return OpenAICompatBrain(settings)
+    raise BrainError(f"Unknown provider {settings.provider!r} in settings.toml.")

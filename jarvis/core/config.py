@@ -31,6 +31,10 @@ class Settings:
     ollama_host: str = "http://127.0.0.1:11434"
     ollama_context_window: int = 8192
     ollama_think: bool = False
+
+    compat_base_url: str = ""
+    compat_model: str = ""
+    compat_api_key_env: str = "JARVIS_API_KEY"
     ollama_keep_alive: str = "30m"
 
     home: Path = Path("~/.jarvis")
@@ -78,6 +82,11 @@ def load_settings(path: Path | None = None) -> Settings:
     s.ollama_context_window = ollama.get("context_window", s.ollama_context_window)
     s.ollama_think = ollama.get("think", s.ollama_think)
     s.ollama_keep_alive = ollama.get("keep_alive", s.ollama_keep_alive)
+
+    compat = data.get("openai_compatible", {})
+    s.compat_base_url = compat.get("base_url", s.compat_base_url)
+    s.compat_model = compat.get("model", s.compat_model)
+    s.compat_api_key_env = compat.get("api_key_env", s.compat_api_key_env)
 
     s.home = _expand(paths.get("home", s.home))
     s.workspace = _expand(paths.get("workspace", s.workspace))

@@ -24,9 +24,10 @@ _SECRET_PATTERNS = [
 
 def redact(text: str) -> str:
     """Remove anything that looks like a credential."""
-    key = os.environ.get("ANTHROPIC_API_KEY")
-    if key and len(key) >= 8:
-        text = text.replace(key, "[REDACTED]")
+    # Any environment variable that looks like it holds a credential.
+    for name, value in os.environ.items():
+        if name.upper().endswith(("_API_KEY", "_TOKEN", "_SECRET")) and len(value) >= 8:
+            text = text.replace(value, "[REDACTED]")
     text = _SECRET_PATTERNS[0].sub("[REDACTED]", text)
     text = _SECRET_PATTERNS[1].sub(lambda m: f"{m.group(1)}{m.group(2)}[REDACTED]", text)
     return text

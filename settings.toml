@@ -6,6 +6,8 @@
 address_as = "Sir"
 # Which brain to use:
 #   "ollama"     a free model running on this computer (see [ollama] below)
+#   "openai_compatible"  a hosted service that uses the OpenAI chat format
+#                (see [openai_compatible] below)
 #   "anthropic"  Claude through the Anthropic API: far more capable, paid,
 #                needs the ANTHROPIC_API_KEY environment variable
 provider = "ollama"
@@ -37,6 +39,17 @@ context_window = 8192
 think = false
 # How long the model stays loaded after the last message.
 keep_alive = "30m"
+
+[openai_compatible]
+# For hosted model services that speak the OpenAI "chat completions" format.
+# base_url is the address from the service's API documentation, ending in /v1
+# (JARVIS adds /chat/completions). model is the model's name on that service.
+# The model must support tool (function) calling.
+base_url = ""
+model = ""
+# The NAME of the environment variable holding your key, never the key
+# itself. Store the key with:  setx JARVIS_API_KEY "your-key-here"
+api_key_env = "JARVIS_API_KEY"
 
 [paths]
 # Where JARVIS keeps its data (action log, stop flag, later: memory).

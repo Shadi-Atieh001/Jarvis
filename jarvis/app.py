@@ -26,8 +26,12 @@ def startup_problem(settings: Settings | None = None) -> str | None:
         from jarvis.core.brains import OllamaBrain
 
         return OllamaBrain(settings).check()
+    if settings.provider == "openai_compatible":
+        from jarvis.core.brains import OpenAICompatBrain
+
+        return OpenAICompatBrain(settings).check()
     if settings.provider != "anthropic":
-        return f'Unknown provider {settings.provider!r} in settings.toml. Use "anthropic" or "ollama".'
+        return f'Unknown provider {settings.provider!r} in settings.toml. Use "ollama", "openai_compatible" or "anthropic".'
     if os.environ.get("ANTHROPIC_API_KEY"):
         return None
     return (
