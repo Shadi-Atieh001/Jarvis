@@ -343,6 +343,7 @@ class OpenAICompatBrain:
             raise BrainError(f"Cannot reach {self.base_url} ({exc.reason}). Check base_url and your connection.") from None
 
         text_parts: list[str] = []
+        reasoning_parts: list[str] = []
         partial: dict[int, dict] = {}  # tool calls arrive in pieces, keyed by index
         finish = "stop"
         with response:
@@ -362,6 +363,12 @@ class OpenAICompatBrain:
                     if delta.get("content"):
                         text_parts.append(delta["content"])
                         on_text(delta["content"])
+                    # Some services stream the model's private reasoning in a
+                    # separate field. It is not shown, but it is kept, because
+                    # some services insist on getting it back (see below).
+                    thought = delta.get("reasoning_content") or delta.get("reasoning")
+                    if thought:
+                        reasoning_parts.append(thought)
                     for tc in delta.get("tool_calls") or []:
                         slot = partial.setdefault(tc.get("index", 0), {"id": "", "name": "", "arguments": ""})
                         fn = tc.get("function") or {}
@@ -372,6 +379,8 @@ class OpenAICompatBrain:
                         finish = choice["finish_reason"]
 
         content: list = []
+        if reasoning_parts:
+            content.append(SimpleNamespace(type="reasoning", text="".join(reasoning_parts)))
         if text_parts:
             content.append(SimpleNamespace(type="text", text="".join(text_parts)))
         for index in sorted(partial):
@@ -402,7 +411,11 @@ def to_openai_messages(messages: list[dict]) -> list[dict]:
         elif msg["role"] == "assistant":
             text = "".join(b.text for b in content if getattr(b, "type", None) == "text")
             calls = [b for b in content if getattr(b, "type", None) == "tool_use"]
-            entry: dict = {"role": "assistant", "content": text or None}
+            reasoning = "".join(b.text for b in content if getattr(b, "type", None) == "reasoning")
+            # Reasoning models (the IFM service among them) reject a history
+            # whose assistant turns lack this field; an empty string is valid.
+            # Services that do not use it ignore it.
+            entry: dict = {"role": "assistant", "content": text, "reasoning_content": reasoning}
             if calls:
                 entry["tool_calls"] = [
                     {"id": c.id, "type": "function", "function": {"name": c.name, "arguments": json.dumps(c.input)}}

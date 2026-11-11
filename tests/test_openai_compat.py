@@ -101,6 +101,31 @@ def test_tool_loop_and_history_translation(jarvis, service):
     assert sent[3]["tool_call_id"] == "call_a" and "Created" in sent[3]["content"]
 
 
+def test_reasoning_is_hidden_but_replayed(jarvis, service):
+    service.script = [
+        [delta({"reasoning_content": "The user greets me. "}), delta({"reasoning_content": "Reply politely."}),
+         delta({"content": "Good evening, Sir."}), delta({}, "stop")],
+        [delta({"reasoning": "Need a file."}), *calls("write_file", {"path": "s.txt", "content": "milk"})],
+        says("Done."),
+    ]
+    ui = FakeUI()
+    jarvis.send("hello", ui)
+    assert ui.text == "Good evening, Sir."  # reasoning is never shown
+    jarvis.send("make s.txt", ui)
+    sent = service.requests[2][1]["messages"]
+    assistants = [m for m in sent if m["role"] == "assistant"]
+    assert assistants[0]["reasoning_content"] == "The user greets me. Reply politely."
+    assert assistants[1]["reasoning_content"] == "Need a file." and assistants[1]["content"] == ""
+    assert assistants[1]["tool_calls"]
+
+
+def test_every_assistant_turn_carries_the_field(jarvis, service):
+    service.script = [says("One."), says("Two.")]
+    jarvis.send("a", FakeUI())
+    jarvis.send("b", FakeUI())
+    assert service.requests[1][1]["messages"][2]["reasoning_content"] == ""
+
+
 def test_gate_still_applies(jarvis, service):
     service.script = [calls("run_command", {"command": "Set-MpPreference -DisableRealtimeMonitoring $true"}), says("No.")]
     ui = FakeUI(approve=True)

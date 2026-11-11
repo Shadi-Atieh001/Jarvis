@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1 — Fix follow-up messages on the IFM service (2026-11-11)
+
+Fixed
+- The second message of a conversation failed with "Add a supported thinking
+  field to each assistant message". The model's reasoning is now kept (never
+  displayed) and sent back with each earlier reply, as the service requires.
+
 ## 0.3.0 — Hosted services (2026-11-11)
 
 Added
