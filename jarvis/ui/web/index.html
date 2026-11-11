@@ -6,138 +6,249 @@
 <title>JARVIS</title>
 <style>
   :root {
-    --bg: #0e1116; --panel: #161b22; --line: #2a313c; --text: #e6e9ee;
-    --muted: #8b95a5; --accent: #5cc8ff; --warn: #f0b429; --danger: #ef5350; --ok: #57c98a;
-    --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+    --bg: #04070c; --panel: rgba(10, 20, 30, .72); --line: rgba(79, 216, 255, .22);
+    --line-strong: rgba(79, 216, 255, .55);
+    --text: #d9eef7; --muted: #6f8fa3; --accent: #4fd8ff; --accent-dim: #1d6f8c;
+    --warn: #ffb347; --danger: #ff5266; --ok: #5dffb0;
+    --mono: "Cascadia Code", "Cascadia Mono", Consolas, ui-monospace, monospace;
+    --sans: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
   body {
-    background: var(--bg); color: var(--text);
-    font: 15px/1.55 "Segoe UI", system-ui, sans-serif;
-    display: flex; flex-direction: column;
+    color: var(--text); font: 15px/1.55 var(--sans);
+    background:
+      radial-gradient(1100px 700px at 22% 38%, rgba(79, 216, 255, .10), transparent 60%),
+      linear-gradient(rgba(79, 216, 255, .035) 1px, transparent 1px) 0 0 / 100% 34px,
+      linear-gradient(90deg, rgba(79, 216, 255, .035) 1px, transparent 1px) 0 0 / 34px 100%,
+      var(--bg);
+    display: flex; flex-direction: column; overflow: hidden;
   }
-  header {
-    display: flex; align-items: center; gap: 12px;
-    padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel);
-  }
-  header h1 { font-size: 15px; letter-spacing: .18em; margin: 0; font-weight: 600; }
-  #status { color: var(--muted); font-size: 13px; flex: 1; }
-  #status.busy { color: var(--accent); }
-  #status.halted { color: var(--danger); }
-  button {
-    font: inherit; color: var(--text); background: transparent;
-    border: 1px solid var(--line); border-radius: 6px; padding: 6px 14px; cursor: pointer;
-  }
-  button:hover { border-color: var(--muted); }
-  button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-  #stop { border-color: var(--danger); color: var(--danger); font-weight: 600; }
-  #stop:hover { background: var(--danger); color: #fff; }
+  .label { font: 600 11px/1 var(--mono); letter-spacing: .22em; text-transform: uppercase; color: var(--muted); }
 
-  #chat { flex: 1; overflow-y: auto; padding: 18px 16px; }
-  .inner { max-width: 780px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+  /* ---- top bar ---- */
+  header {
+    display: flex; align-items: center; gap: 18px; padding: 10px 18px;
+    border-bottom: 1px solid var(--line); background: rgba(4, 9, 14, .8);
+  }
+  header h1 {
+    margin: 0; font: 600 15px/1 var(--mono); letter-spacing: .42em; color: var(--accent);
+    text-shadow: 0 0 14px rgba(79, 216, 255, .6);
+  }
+  .readouts { display: flex; gap: 18px; flex: 1; min-width: 0; }
+  .readout { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+  .readout b { font: 500 12px/1 var(--mono); color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  button { font: inherit; color: var(--text); background: transparent; cursor: pointer; }
+  button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #stop {
+    font: 700 12px/1 var(--mono); letter-spacing: .2em; padding: 10px 16px;
+    color: var(--danger); border: 1px solid var(--danger); border-radius: 2px;
+    box-shadow: 0 0 12px rgba(255, 82, 102, .25) inset;
+  }
+  #stop:hover { background: var(--danger); color: #1a0308; }
+
+  /* ---- layout ---- */
+  main { flex: 1; display: grid; grid-template-columns: minmax(300px, 38%) 1fr; min-height: 0; }
+  .hud {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+    padding: 18px; border-right: 1px solid var(--line); position: relative; min-height: 0;
+  }
+  #orb { width: min(100%, 360px); aspect-ratio: 1; display: block; }
+  #state { font: 600 13px/1 var(--mono); letter-spacing: .34em; color: var(--accent); text-shadow: 0 0 12px rgba(79, 216, 255, .5); }
+  #state.warn { color: var(--warn); text-shadow: 0 0 12px rgba(255, 179, 71, .5); }
+  #state.halt { color: var(--danger); text-shadow: 0 0 12px rgba(255, 82, 102, .5); }
+  #caption { min-height: 2.6em; max-width: 34ch; text-align: center; color: var(--muted); font-size: 13px; }
+  .controls { display: flex; gap: 10px; align-items: center; }
+  .round {
+    width: 58px; height: 58px; border-radius: 50%; border: 1px solid var(--line-strong);
+    display: grid; place-items: center; background: rgba(79, 216, 255, .06);
+    box-shadow: 0 0 18px rgba(79, 216, 255, .18), 0 0 14px rgba(79, 216, 255, .12) inset;
+    transition: background .15s, box-shadow .15s;
+  }
+  .round:hover { background: rgba(79, 216, 255, .16); }
+  .round svg { width: 24px; height: 24px; fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .round.small { width: 40px; height: 40px; }
+  .round.small svg { width: 17px; height: 17px; }
+  #mic.live { background: rgba(93, 255, 176, .18); border-color: var(--ok); box-shadow: 0 0 26px rgba(93, 255, 176, .45); }
+  #mic.live svg { stroke: var(--ok); }
+  #mic:disabled { opacity: .35; cursor: not-allowed; }
+  #mute.off svg { stroke: var(--muted); }
+  .hint { font: 11px/1.4 var(--mono); color: var(--muted); text-align: center; }
+
+  /* corner brackets */
+  .bracket::before, .bracket::after {
+    content: ""; position: absolute; width: 16px; height: 16px; border: 1px solid var(--line-strong); pointer-events: none;
+  }
+  .bracket::before { top: 10px; left: 10px; border-right: 0; border-bottom: 0; }
+  .bracket::after { bottom: 10px; right: 10px; border-left: 0; border-top: 0; }
+
+  /* ---- conversation ---- */
+  .talk { display: flex; flex-direction: column; min-height: 0; position: relative; }
+  #chat { flex: 1; overflow-y: auto; padding: 22px 22px 8px; scrollbar-width: thin; scrollbar-color: var(--accent-dim) transparent; }
+  #log { display: flex; flex-direction: column; gap: 14px; max-width: 760px; margin: 0 auto; }
   .msg { white-space: pre-wrap; overflow-wrap: anywhere; }
   .msg.user {
-    align-self: flex-end; background: #1f2a3a; border-radius: 12px 12px 2px 12px;
-    padding: 8px 12px; max-width: 85%;
+    align-self: flex-end; max-width: 85%; padding: 8px 14px; color: #eaf8ff;
+    background: rgba(79, 216, 255, .10); border: 1px solid var(--line); border-radius: 2px 14px 2px 14px;
   }
-  .msg.jarvis { align-self: stretch; }
-  .msg.info {
-    color: var(--muted); font-family: var(--mono); font-size: 13px;
-    border-left: 2px solid var(--line); padding-left: 10px;
+  .msg.user.spoken::before { content: "VOICE  "; font: 600 10px var(--mono); letter-spacing: .2em; color: var(--accent); }
+  .msg.jarvis { border-left: 2px solid var(--accent); padding: 2px 0 2px 14px; }
+  .msg.info { color: var(--muted); font: 12.5px/1.5 var(--mono); border-left: 2px solid var(--line); padding-left: 12px; }
+  .msg pre, .confirm pre {
+    background: rgba(2, 6, 10, .85); border: 1px solid var(--line); border-radius: 2px;
+    padding: 10px 12px; margin: 8px 0; overflow-x: auto; font: 12.5px/1.5 var(--mono); white-space: pre;
   }
-  .msg pre {
-    background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
-    padding: 10px; margin: 6px 0; overflow-x: auto; font: 13px/1.45 var(--mono); white-space: pre;
-  }
-  .tool { font: 12.5px var(--mono); color: var(--muted); overflow-wrap: anywhere; }
-  .tool b { font-weight: 600; }
+  .tool { font: 12px/1.5 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+  .tool b { font-weight: 600; letter-spacing: .12em; text-transform: uppercase; }
   .tool .auto, .tool .approved { color: var(--ok); }
   .tool .denied, .tool .blocked { color: var(--danger); }
 
   .confirm {
-    border: 1px solid var(--warn); border-radius: 8px; background: var(--panel); padding: 12px 14px;
+    border: 1px solid var(--warn); border-radius: 2px; padding: 14px 16px;
+    background: rgba(255, 179, 71, .06); box-shadow: 0 0 24px rgba(255, 179, 71, .12);
   }
-  .confirm h2 { font-size: 14px; margin: 0 0 2px; color: var(--warn); }
-  .confirm .why { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
-  .confirm pre {
-    background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px;
-    margin: 0 0 10px; max-height: 320px; overflow: auto; font: 13px/1.45 var(--mono);
-    white-space: pre-wrap; overflow-wrap: anywhere;
+  .confirm h2 { font: 700 12px/1 var(--mono); letter-spacing: .2em; text-transform: uppercase; margin: 0 0 8px; color: var(--warn); }
+  .confirm .why { color: var(--muted); font-size: 13px; margin-bottom: 4px; }
+  .confirm pre { max-height: 300px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .confirm .row { display: flex; gap: 10px; margin-top: 10px; }
+  .confirm .row button {
+    font: 700 12px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase;
+    padding: 10px 18px; border: 1px solid var(--line-strong); border-radius: 2px;
   }
-  .confirm .row { display: flex; gap: 8px; }
   .confirm .yes { border-color: var(--ok); color: var(--ok); }
-  .confirm .yes:hover { background: var(--ok); color: #06210f; }
-  .confirm.answered { border-color: var(--line); opacity: .75; }
-  .confirm .verdict { font-size: 13px; color: var(--muted); }
+  .confirm .yes:hover { background: var(--ok); color: #03170d; }
+  .confirm .no:hover { background: rgba(79, 216, 255, .14); }
+  .confirm.answered { border-color: var(--line); box-shadow: none; background: transparent; opacity: .7; }
+  .confirm .verdict { font: 12px var(--mono); color: var(--muted); margin-top: 8px; }
 
-  form { border-top: 1px solid var(--line); background: var(--panel); padding: 12px 16px; }
-  form .inner { flex-direction: row; gap: 8px; align-items: flex-end; }
-  textarea {
-    flex: 1; resize: none; font: inherit; color: var(--text); background: var(--bg);
-    border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; max-height: 180px;
+  form { padding: 12px 22px 18px; }
+  .entry {
+    max-width: 760px; margin: 0 auto; display: flex; gap: 10px; align-items: flex-end;
+    border: 1px solid var(--line-strong); border-radius: 2px; background: var(--panel); padding: 8px 8px 8px 14px;
+    box-shadow: 0 0 22px rgba(79, 216, 255, .10);
   }
-  #send { border-color: var(--accent); color: var(--accent); }
-  #send:disabled { opacity: .4; cursor: default; }
+  .entry:focus-within { border-color: var(--accent); }
+  textarea {
+    flex: 1; resize: none; font: inherit; color: var(--text); background: transparent;
+    border: 0; outline: 0; padding: 6px 0; max-height: 160px;
+  }
+  textarea:focus-visible { outline: 0; }  /* the surrounding box shows focus */
+  textarea::placeholder { color: var(--muted); }
+  #send {
+    font: 700 12px/1 var(--mono); letter-spacing: .18em; padding: 10px 14px;
+    color: #021018; background: var(--accent); border: 0; border-radius: 2px;
+  }
+  #send:disabled { background: var(--accent-dim); color: #0a2530; cursor: default; }
+
+  @media (max-width: 820px) {
+    main { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+    .hud { flex-direction: row; justify-content: flex-start; border-right: 0; border-bottom: 1px solid var(--line); padding: 10px 16px; gap: 14px; }
+    #orb { width: 92px; flex: none; }
+    .hud .side { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; min-width: 0; flex: 1; }
+    #caption, .hint, .bracket::before, .bracket::after { display: none; }
+    .readouts .readout:nth-child(n+2) { display: none; }
+  }
+  @media (min-width: 821px) { .hud .side { display: contents; } }
 </style>
 </head>
 <body>
 <header>
   <h1>JARVIS</h1>
-  <span id="status" role="status">Connecting…</span>
-  <button id="stop" title="Emergency stop: halt everything now">Stop</button>
+  <div class="readouts">
+    <div class="readout"><span class="label">Brain</span><b id="r-model">—</b></div>
+    <div class="readout"><span class="label">Voice</span><b id="r-voice">—</b></div>
+    <div class="readout"><span class="label">Local time</span><b id="r-time">—</b></div>
+  </div>
+  <button id="stop" title="Emergency stop: halt everything now">STOP</button>
 </header>
 
-<main id="chat"><div class="inner" id="log" aria-live="polite"></div></main>
+<main>
+  <section class="hud bracket" aria-label="Status">
+    <canvas id="orb" width="720" height="720" aria-hidden="true"></canvas>
+    <div class="side">
+      <div id="state" role="status">CONNECTING</div>
+      <div id="caption"></div>
+      <div class="controls">
+        <button id="mute" class="round small" title="Mute spoken replies" aria-label="Mute spoken replies" aria-pressed="false">
+          <svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path id="mute-waves" d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>
+        </button>
+        <button id="mic" class="round" title="Talk to JARVIS (Ctrl+Space)" aria-label="Talk to JARVIS" disabled>
+          <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/></svg>
+        </button>
+      </div>
+      <div class="hint" id="hint">Ctrl + Space to talk</div>
+    </div>
+  </section>
 
-<form id="form">
-  <div class="inner">
-    <textarea id="input" rows="1" placeholder="Ask JARVIS, or type /help" aria-label="Message" autofocus></textarea>
-    <button id="send" type="submit">Send</button>
-  </div>
-</form>
+  <section class="talk">
+    <div id="chat"><div id="log" aria-live="polite"></div></div>
+    <form id="form">
+      <div class="entry">
+        <textarea id="input" rows="1" placeholder="Type a request, or /help" aria-label="Message" autofocus></textarea>
+        <button id="send" type="submit">SEND</button>
+      </div>
+    </form>
+  </section>
+</main>
 
 <script>
+"use strict";
 const TOKEN = "__JARVIS_TOKEN__";
-const log = document.getElementById("log");
-const chat = document.getElementById("chat");
-const input = document.getElementById("input");
-const sendBtn = document.getElementById("send");
-const statusEl = document.getElementById("status");
+const ADDRESS = "__ADDRESS__";
+const $ = (id) => document.getElementById(id);
+const log = $("log"), chat = $("chat"), input = $("input"), sendBtn = $("send");
+const stateEl = $("state"), captionEl = $("caption"), micBtn = $("mic"), muteBtn = $("mute");
 
-let ws, busy = false, current = null, currentText = "";
+let ws, busy = false, halted = false, current = null, currentText = "";
+let info = { voice: { listen: false, speak: false, problems: [] }, speak_replies: "when_spoken" };
+let muted = false, speakThisTurn = false, awaitingApproval = 0;
 
-function setStatus(text, cls) { statusEl.textContent = text; statusEl.className = cls || ""; }
-function setBusy(b) {
-  busy = b; sendBtn.disabled = b;
-  if (b) setStatus("Working…", "busy"); else setStatus("At your service, __ADDRESS__.");
+/* ------------------------------------------------------------ state */
+// One word drives the label and the orb: idle | listening | thinking | speaking | approval | halted | offline
+let mode = "offline";
+const LABELS = {
+  idle: "STANDING BY", listening: "LISTENING", transcribing: "TRANSCRIBING", thinking: "THINKING",
+  speaking: "SPEAKING", approval: "AWAITING APPROVAL", halted: "HALTED", offline: "OFFLINE",
+};
+function refreshMode() {
+  let next = "idle";
+  if (!ws || ws.readyState !== 1) next = "offline";
+  else if (halted) next = "halted";
+  else if (recorder.active) next = "listening";
+  else if (recorder.transcribing) next = "transcribing";
+  else if (awaitingApproval > 0) next = "approval";
+  else if (speech.playing) next = "speaking";
+  else if (busy) next = "thinking";
+  mode = next;
+  stateEl.textContent = LABELS[next];
+  stateEl.className = next === "approval" ? "warn" : (next === "halted" || next === "offline") ? "halt" : "";
+  sendBtn.disabled = busy || next === "offline";
 }
+function caption(text) { captionEl.textContent = text || ""; }
+
+/* ------------------------------------------------------------- chat */
 function scrollDown() { chat.scrollTop = chat.scrollHeight; }
-function add(el) { log.appendChild(el); scrollDown(); return el; }
+function add(node) { log.appendChild(node); scrollDown(); return node; }
 function el(tag, cls, text) {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
   if (text !== undefined) e.textContent = text;
   return e;
 }
-
-// Renders reply text. Only ``` code fences are treated specially; everything
-// is inserted as text, never as HTML, so replies cannot inject markup.
+// Reply text is always inserted as text, never as HTML, so it cannot inject
+// markup. Only ``` code fences get special treatment.
 function render(target, text) {
   target.replaceChildren();
   text.split(/```/).forEach((part, i) => {
-    if (i % 2 === 1) {
-      target.appendChild(el("pre", "", part.replace(/^[\w+-]*\n/, "")));
-    } else if (part) {
-      target.appendChild(document.createTextNode(part));
-    }
+    if (i % 2 === 1) target.appendChild(el("pre", "", part.replace(/^[\w+-]*\n/, "")));
+    else if (part) target.appendChild(document.createTextNode(part));
   });
 }
 
 function connect() {
   ws = new WebSocket(`ws://${location.host}/ws?token=${encodeURIComponent(TOKEN)}`);
-  ws.onopen = () => setBusy(false);
-  ws.onclose = () => { setStatus("Disconnected. Restart JARVIS.", "halted"); sendBtn.disabled = true; };
+  ws.onopen = () => { refreshMode(); caption(`At your service, ${ADDRESS}.`); };
+  ws.onclose = () => { refreshMode(); caption("Connection lost. Restart JARVIS."); };
   ws.onmessage = (event) => handle(JSON.parse(event.data));
 }
 
@@ -147,40 +258,46 @@ function handle(m) {
     currentText += m.delta;
     render(current, currentText);
     scrollDown();
+    speech.feed(m.delta);
   } else if (m.type === "tool") {
-    current = null;
+    current = null; speech.flush();
     const row = el("div", "tool");
     row.appendChild(el("b", m.decision, m.decision));
     row.appendChild(document.createTextNode(`  ${m.name}: ${m.summary}`));
     add(row);
   } else if (m.type === "confirm") {
-    current = null;
+    current = null; speech.flush();
     showConfirm(m);
   } else if (m.type === "info") {
     current = null;
     add(el("div", "msg info", m.text));
-    if (/stop engaged/i.test(m.text)) setStatus("Emergency stop engaged.", "halted");
-    if (/stop cleared/i.test(m.text) && !busy) setBusy(false);
+    if (/stop engaged/i.test(m.text)) { halted = true; speech.stop(); }
+    if (/stop cleared/i.test(m.text)) halted = false;
+    refreshMode();
   } else if (m.type === "done") {
-    current = null;
-    setBusy(false);
-    if (m.status === "stopped") setStatus("Emergency stop engaged.", "halted");
+    current = null; busy = false; awaitingApproval = 0;
+    speech.flush();
+    if (m.status === "stopped") { halted = true; speech.stop(); }
+    refreshMode();
   }
 }
 
 function showConfirm(m) {
+  awaitingApproval++; refreshMode();
+  if (speakThisTurn) speech.say(`I need your approval, ${ADDRESS}.`);
   const card = el("div", "confirm");
   card.setAttribute("role", "alertdialog");
-  card.appendChild(el("h2", "", `Permission needed: ${m.tool}`));
+  card.appendChild(el("h2", "", `Permission needed · ${m.tool}`));
   card.appendChild(el("div", "why", `Why you are being asked: ${m.reason}`));
   card.appendChild(el("pre", "", m.description));
   const row = el("div", "row");
   const yes = el("button", "yes", "Yes, proceed");
-  const no = el("button", "", "No");
+  const no = el("button", "no", "No");
   const answer = (approved) => {
     ws.send(JSON.stringify({ type: "confirm_reply", id: m.id, approved }));
     card.classList.add("answered");
     row.replaceWith(el("div", "verdict", approved ? "You approved this." : "You refused this."));
+    awaitingApproval = Math.max(0, awaitingApproval - 1); refreshMode();
     input.focus();
   };
   yes.onclick = () => answer(true);
@@ -191,26 +308,317 @@ function showConfirm(m) {
   no.focus();  // the safe choice is the default
 }
 
-document.getElementById("form").addEventListener("submit", (e) => {
-  e.preventDefault();
-  const text = input.value.trim();
-  if (!text || ws.readyState !== 1) return;
+function submit(text, spoken) {
+  text = text.trim();
+  if (!text || !ws || ws.readyState !== 1) return false;
   const isCommand = text.startsWith("/");
-  if (busy && !isCommand) return;
-  add(el("div", "msg user", text));
+  if (busy && !isCommand) return false;
+  add(el("div", "msg user" + (spoken ? " spoken" : ""), text));
   ws.send(JSON.stringify({ type: "user", text }));
-  input.value = ""; input.style.height = "auto";
-  if (!isCommand) { current = null; setBusy(true); }
+  if (!isCommand) {
+    current = null; busy = true;
+    speech.stop();
+    speakThisTurn = !muted && info.speak_replies !== "never" && (spoken || info.speak_replies === "always");
+    refreshMode();
+  }
+  return true;
+}
+
+$("form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  if (submit(input.value, false)) { input.value = ""; input.style.height = "auto"; }
 });
 input.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); document.getElementById("form").requestSubmit(); }
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("form").requestSubmit(); }
 });
-input.addEventListener("input", () => {
-  input.style.height = "auto"; input.style.height = input.scrollHeight + "px";
-});
-document.getElementById("stop").onclick = () => {
-  if (ws.readyState === 1) ws.send(JSON.stringify({ type: "stop" }));
+input.addEventListener("input", () => { input.style.height = "auto"; input.style.height = input.scrollHeight + "px"; });
+$("stop").onclick = () => {
+  speech.stop(); recorder.cancel();
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: "stop" }));
 };
+
+/* ------------------------------------------------------------ audio */
+let audioCtx = null;
+function audio() {
+  // 16 kHz is what speech recognition wants; the browser resamples the mic.
+  if (!audioCtx) audioCtx = new AudioContext({ sampleRate: 16000 });
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  return audioCtx;
+}
+let level = 0;  // 0..1 loudness of whatever is live (mic or speech), drives the orb
+function loudness(analyser, buf) {
+  analyser.getFloatTimeDomainData(buf);
+  let sum = 0;
+  for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+  return Math.sqrt(sum / buf.length);
+}
+async function api(path, options = {}) {
+  options.headers = Object.assign({ "x-jarvis-token": TOKEN }, options.headers || {});
+  const response = await fetch(path, options);
+  if (!response.ok) {
+    let detail = response.statusText;
+    try { detail = (await response.json()).detail || detail; } catch (_) {}
+    throw new Error(detail);
+  }
+  return response;
+}
+
+/* --- speaking: sentences are synthesised one at a time and played in order */
+const speech = {
+  buffer: "", inCode: false, queue: [], playing: false, source: null, generation: 0,
+  feed(delta) {
+    if (!speakThisTurn) return;
+    this.buffer += delta;
+    // Hand over each completed sentence; keep the unfinished tail.
+    let match;
+    while ((match = this.buffer.match(/^([\s\S]*?(?:[.!?…]["')\]]?\s+|\n+))/))) {
+      this.buffer = this.buffer.slice(match[1].length);
+      this.sentence(match[1]);
+    }
+  },
+  flush() { if (this.buffer.trim()) this.sentence(this.buffer); this.buffer = ""; },
+  sentence(text) {
+    // Skip anything inside ``` fences: nobody wants code read aloud.
+    const fences = (text.match(/```/g) || []).length;
+    const wasInCode = this.inCode;
+    if (fences % 2 === 1) this.inCode = !this.inCode;
+    if (wasInCode || fences) return;
+    if (/[A-Za-z0-9]/.test(text)) this.say(text);
+  },
+  say(text) {
+    if (muted) return;
+    const generation = this.generation;
+    // Start fetching at once so the next sentence is ready when this one ends.
+    const item = { text, wav: info.voice.speak
+      ? api("/api/speak", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) })
+          .then((r) => r.arrayBuffer()).catch(() => null)
+      : Promise.resolve(null) };
+    this.queue.push(item);
+    if (!this.playing) this.next(generation);
+  },
+  async next(generation) {
+    const item = this.queue.shift();
+    if (!item || generation !== this.generation) { this.playing = false; level = 0; refreshMode(); return; }
+    this.playing = true; refreshMode();
+    const wav = await item.wav;
+    if (generation !== this.generation) return;
+    try {
+      if (wav && wav.byteLength > 44) await this.playWav(wav);
+      else await this.playBuiltIn(item.text);  // fallback: Windows' own voice
+    } catch (_) { /* a failed sentence must not block the rest */ }
+    if (generation === this.generation) this.next(generation);
+  },
+  async playWav(wav) {
+    const ctx = audio();
+    const decoded = await ctx.decodeAudioData(wav);
+    await new Promise((resolve) => {
+      const source = ctx.createBufferSource(), analyser = ctx.createAnalyser();
+      analyser.fftSize = 1024;
+      const buf = new Float32Array(analyser.fftSize);
+      source.buffer = decoded;
+      source.connect(analyser); analyser.connect(ctx.destination);
+      const meter = setInterval(() => { level = Math.min(1, loudness(analyser, buf) * 5); }, 40);
+      source.onended = () => { clearInterval(meter); this.source = null; resolve(); };
+      this.source = source;
+      source.start();
+    });
+  },
+  playBuiltIn(text) {
+    return new Promise((resolve) => {
+      if (!("speechSynthesis" in window)) return resolve();
+      const u = new SpeechSynthesisUtterance(text.replace(/[*_#`]/g, ""));
+      const british = speechSynthesis.getVoices().find((v) => v.lang === "en-GB");
+      if (british) u.voice = british;
+      u.onend = u.onerror = () => resolve();
+      level = 0.35;
+      speechSynthesis.speak(u);
+    });
+  },
+  stop() {
+    this.generation++; this.queue = []; this.buffer = ""; this.inCode = false; this.playing = false;
+    if (this.source) { try { this.source.stop(); } catch (_) {} this.source = null; }
+    if ("speechSynthesis" in window) speechSynthesis.cancel();
+    level = 0; refreshMode();
+  },
+};
+
+/* --- listening: record 16 kHz mono, stop on silence, send as a WAV */
+const recorder = {
+  active: false, transcribing: false, stream: null, node: null, chunks: [], timer: null,
+  async start() {
+    if (this.active || this.transcribing) return;
+    speech.stop();  // talking over JARVIS interrupts it
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
+    catch (err) { caption("Microphone unavailable: " + (err.message || err.name)); return; }
+    const ctx = audio();
+    const source = ctx.createMediaStreamSource(stream), analyser = ctx.createAnalyser();
+    analyser.fftSize = 1024;
+    // ScriptProcessor is the simplest way to collect raw samples.
+    const node = ctx.createScriptProcessor(4096, 1, 1), silent = ctx.createGain();
+    silent.gain.value = 0;
+    this.chunks = [];
+    node.onaudioprocess = (e) => { if (this.active) this.chunks.push(new Float32Array(e.inputBuffer.getChannelData(0))); };
+    source.connect(analyser); source.connect(node); node.connect(silent); silent.connect(ctx.destination);
+    Object.assign(this, { active: true, stream, node, source });
+    micBtn.classList.add("live"); caption("Listening… click the microphone when you have finished.");
+    refreshMode();
+
+    const buf = new Float32Array(analyser.fftSize), began = performance.now();
+    let heardSpeech = false, quietSince = null;
+    this.timer = setInterval(() => {
+      const loud = loudness(analyser, buf), now = performance.now();
+      level = Math.min(1, loud * 9);
+      if (loud > 0.02) { heardSpeech = true; quietSince = null; }
+      else if (quietSince === null) quietSince = now;
+      const quiet = quietSince === null ? 0 : now - quietSince;
+      if (heardSpeech && quiet > 1400) this.finish();           // you stopped talking
+      else if (!heardSpeech && now - began > 8000) { this.cancel(); caption("I didn't hear anything."); }
+      else if (now - began > 60000) this.finish();              // one minute at most
+    }, 60);
+  },
+  release() {
+    clearInterval(this.timer);
+    if (this.node) { this.node.disconnect(); this.node.onaudioprocess = null; }
+    if (this.source) this.source.disconnect();
+    if (this.stream) this.stream.getTracks().forEach((t) => t.stop());  // turns the mic light off
+    this.active = false; this.stream = this.node = this.source = null; level = 0;
+    micBtn.classList.remove("live");
+  },
+  cancel() { if (this.active) { this.release(); caption(""); refreshMode(); } },
+  async finish() {
+    if (!this.active) return;
+    const chunks = this.chunks;
+    this.release();
+    this.transcribing = true; caption("Transcribing…"); refreshMode();
+    try {
+      const response = await api("/api/transcribe", { method: "POST", headers: { "Content-Type": "audio/wav" }, body: toWav(chunks, 16000) });
+      const text = (await response.json()).text;
+      this.transcribing = false;
+      if (!text) caption("I didn't catch that.");
+      else if (!submit(text, true)) { input.value = text; caption("Still busy; your words are in the box."); }
+      else caption("");
+    } catch (err) {
+      this.transcribing = false; caption("Could not transcribe: " + err.message);
+    }
+    refreshMode();
+  },
+  toggle() { this.active ? this.finish() : this.start(); },
+};
+
+function toWav(chunks, rate) {
+  const length = chunks.reduce((n, c) => n + c.length, 0);
+  const view = new DataView(new ArrayBuffer(44 + length * 2));
+  const text = (offset, s) => { for (let i = 0; i < s.length; i++) view.setUint8(offset + i, s.charCodeAt(i)); };
+  text(0, "RIFF"); view.setUint32(4, 36 + length * 2, true); text(8, "WAVEfmt ");
+  view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+  view.setUint32(24, rate, true); view.setUint32(28, rate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+  text(36, "data"); view.setUint32(40, length * 2, true);
+  let offset = 44;
+  for (const chunk of chunks) for (let i = 0; i < chunk.length; i++, offset += 2) {
+    const s = Math.max(-1, Math.min(1, chunk[i]));
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+  }
+  return new Blob([view], { type: "audio/wav" });
+}
+
+micBtn.onclick = () => recorder.toggle();
+document.addEventListener("keydown", (e) => {
+  if (e.ctrlKey && e.code === "Space" && !micBtn.disabled) { e.preventDefault(); recorder.toggle(); }
+});
+muteBtn.onclick = () => {
+  muted = !muted;
+  muteBtn.classList.toggle("off", muted);
+  muteBtn.setAttribute("aria-pressed", String(muted));
+  $("mute-waves").style.display = muted ? "none" : "";
+  if (muted) speech.stop();
+};
+
+/* -------------------------------------------------------------- orb */
+const orb = $("orb"), g = orb.getContext("2d");
+const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const COLOURS = {
+  idle: [79, 216, 255], thinking: [79, 216, 255], speaking: [120, 230, 255], listening: [93, 255, 176],
+  transcribing: [93, 255, 176], approval: [255, 179, 71], halted: [255, 82, 102], offline: [90, 110, 125],
+};
+let shown = 0, colour = COLOURS.offline.slice(), spin = 0, last = performance.now();
+function drawOrb(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  const target = COLOURS[mode] || COLOURS.idle;
+  for (let i = 0; i < 3; i++) colour[i] += (target[i] - colour[i]) * Math.min(1, dt * 6);
+  // Energy: real loudness when listening or speaking, a slow pulse otherwise.
+  const t = now / 1000;
+  let energy = level;
+  if (mode === "thinking" || mode === "transcribing") energy = 0.35 + 0.25 * Math.sin(t * 5);
+  else if (mode === "idle") energy = 0.10 + 0.05 * Math.sin(t * 1.3);
+  else if (mode === "approval") energy = 0.25 + 0.2 * Math.sin(t * 3);
+  else if (mode === "halted" || mode === "offline") energy = 0.04;
+  shown += (energy - shown) * Math.min(1, dt * 12);
+  const speed = still ? 0 : (mode === "thinking" || mode === "transcribing" ? 1.6 : mode === "halted" || mode === "offline" ? 0.05 : 0.35 + shown);
+  spin += dt * speed;
+
+  const W = orb.width, c = W / 2, rgb = colour.map(Math.round).join(",");
+  const ink = (a) => `rgba(${rgb},${a})`;
+  g.clearRect(0, 0, W, W);
+  g.lineCap = "round";
+
+  const glow = g.createRadialGradient(c, c, 0, c, c, c);
+  glow.addColorStop(0, ink(0.20 + shown * 0.35)); glow.addColorStop(0.45, ink(0.05)); glow.addColorStop(1, ink(0));
+  g.fillStyle = glow; g.fillRect(0, 0, W, W);
+
+  // outer tick ring
+  g.strokeStyle = ink(0.35); g.lineWidth = 2;
+  for (let i = 0; i < 72; i++) {
+    const a = (i / 72) * Math.PI * 2 + spin * 0.15, long = i % 6 === 0;
+    const r1 = c * 0.93, r2 = c * (long ? 0.87 : 0.90);
+    g.beginPath(); g.moveTo(c + Math.cos(a) * r1, c + Math.sin(a) * r1); g.lineTo(c + Math.cos(a) * r2, c + Math.sin(a) * r2); g.stroke();
+  }
+  // rotating arc segments: [radius, width, start, sweep, direction, opacity]
+  const arcs = [[0.80, 5, 0.0, 1.9, 1, 0.75], [0.80, 5, 3.3, 1.1, 1, 0.45], [0.71, 2, 1.0, 4.4, -1.4, 0.5],
+                [0.62, 9, 0.4, 0.9, 2.1, 0.8], [0.62, 9, 2.6, 0.5, 2.1, 0.55], [0.62, 9, 4.3, 1.3, 2.1, 0.35],
+                [0.52, 2, 0.0, 5.4, -0.7, 0.4]];
+  for (const [r, w, start, sweep, dir, alpha] of arcs) {
+    g.strokeStyle = ink(alpha); g.lineWidth = w;
+    g.beginPath(); g.arc(c, c, c * r, start + spin * dir, start + spin * dir + sweep); g.stroke();
+  }
+  // live waveform ring: bars that rise with the energy
+  const bars = 64, base = c * 0.40;
+  g.lineWidth = 4;
+  for (let i = 0; i < bars; i++) {
+    const a = (i / bars) * Math.PI * 2 - Math.PI / 2;
+    const wobble = 0.5 + 0.5 * Math.sin(i * 0.9 + t * 7) * Math.sin(i * 0.31 - t * 3.1);
+    const h = c * (0.015 + shown * 0.16 * wobble);
+    g.strokeStyle = ink(0.35 + 0.6 * wobble * Math.min(1, shown * 2));
+    g.beginPath(); g.moveTo(c + Math.cos(a) * base, c + Math.sin(a) * base);
+    g.lineTo(c + Math.cos(a) * (base + h), c + Math.sin(a) * (base + h)); g.stroke();
+  }
+  // core
+  const coreR = c * (0.26 + shown * 0.06);
+  const core = g.createRadialGradient(c, c, 0, c, c, coreR);
+  core.addColorStop(0, `rgba(255,255,255,${0.75 + shown * 0.25})`); core.addColorStop(0.35, ink(0.75)); core.addColorStop(1, ink(0));
+  g.fillStyle = core; g.beginPath(); g.arc(c, c, coreR, 0, Math.PI * 2); g.fill();
+  g.strokeStyle = ink(0.8); g.lineWidth = 2; g.beginPath(); g.arc(c, c, c * 0.33, 0, Math.PI * 2); g.stroke();
+
+  requestAnimationFrame(drawOrb);
+}
+requestAnimationFrame(drawOrb);
+
+/* ------------------------------------------------------------ start */
+function tick() { $("r-time").textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }); }
+tick(); setInterval(tick, 1000);
+
+api("/api/info").then((r) => r.json()).then((data) => {
+  info = data;
+  $("r-model").textContent = data.model || data.provider;
+  const v = data.voice;
+  $("r-voice").textContent = v.listen && v.speak ? "READY" : v.listen ? "LISTEN ONLY" : "NOT SET UP";
+  micBtn.disabled = !v.listen;
+  if (!v.listen) {
+    $("hint").textContent = "Voice is not set up";
+    micBtn.title = "Voice is not set up";
+    if (v.problems.length) add(el("div", "msg info", "Voice is not available yet.\n" + v.problems.join("\n")));
+  }
+}).catch(() => { $("r-voice").textContent = "UNKNOWN"; });
 
 connect();
 </script>

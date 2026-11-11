@@ -32,6 +32,11 @@ class Settings:
     ollama_context_window: int = 8192
     ollama_think: bool = False
 
+    voice_enabled: bool = True
+    whisper_model: str = "base.en"
+    piper_voice: str = "en_GB-alan-medium"
+    speak_replies: str = "when_spoken"  # when_spoken | always | never
+
     compat_base_url: str = ""
     compat_model: str = ""
     compat_api_key_env: str = "JARVIS_API_KEY"
@@ -82,6 +87,12 @@ def load_settings(path: Path | None = None) -> Settings:
     s.ollama_context_window = ollama.get("context_window", s.ollama_context_window)
     s.ollama_think = ollama.get("think", s.ollama_think)
     s.ollama_keep_alive = ollama.get("keep_alive", s.ollama_keep_alive)
+
+    voice = data.get("voice", {})
+    s.voice_enabled = voice.get("enabled", s.voice_enabled)
+    s.whisper_model = voice.get("whisper_model", s.whisper_model)
+    s.piper_voice = voice.get("piper_voice", s.piper_voice)
+    s.speak_replies = voice.get("speak_replies", s.speak_replies)
 
     compat = data.get("openai_compatible", {})
     s.compat_base_url = compat.get("base_url", s.compat_base_url)

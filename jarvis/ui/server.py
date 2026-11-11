@@ -26,12 +26,17 @@ import threading
 from pathlib import Path
 from urllib.parse import urlparse
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import HTMLResponse, Response
 
 from jarvis.core import commands
 from jarvis.core.agent import Jarvis
 from jarvis.core.permissions import Decision
+from jarvis.voice.engine import Voice, VoiceUnavailable
+
+MAX_AUDIO_BYTES = 20_000_000  # about ten minutes of speech
+MAX_SPEAK_CHARS = 2000
 
 WEB_DIR = Path(__file__).parent / "web"
 
@@ -95,6 +100,51 @@ def create_app(jarvis: Jarvis, token: str | None = None) -> FastAPI:
     def index() -> str:
         html = (WEB_DIR / "index.html").read_text(encoding="utf-8")
         return html.replace("__JARVIS_TOKEN__", token).replace("__ADDRESS__", jarvis.settings.address_as)
+
+    voice = Voice(jarvis.settings)
+
+    def authorise(request: Request) -> None:
+        """Same two checks as the WebSocket: our token, and our own page."""
+        origin = request.headers.get("origin")
+        if request.headers.get("x-jarvis-token") != token:
+            raise HTTPException(status_code=403)
+        if origin is not None and urlparse(origin).netloc != request.headers.get("host", ""):
+            raise HTTPException(status_code=403)
+
+    @app.get("/api/info")
+    def info(request: Request) -> dict:
+        authorise(request)
+        s = jarvis.settings
+        model = {"anthropic": s.model, "ollama": s.ollama_model, "openai_compatible": s.compat_model}.get(s.provider, "")
+        return {
+            "address": s.address_as,
+            "provider": s.provider,
+            "model": model,
+            "voice": voice.status(),
+            "speak_replies": s.speak_replies,
+        }
+
+    @app.post("/api/transcribe")
+    async def transcribe(request: Request) -> dict:
+        authorise(request)
+        audio = await request.body()
+        if not audio or len(audio) > MAX_AUDIO_BYTES:
+            raise HTTPException(status_code=400, detail="No audio, or too much of it.")
+        try:
+            text = await run_in_threadpool(voice.transcribe, audio)
+        except VoiceUnavailable as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from None
+        return {"text": text}
+
+    @app.post("/api/speak")
+    async def speak(request: Request) -> Response:
+        authorise(request)
+        text = str((await request.json()).get("text", ""))[:MAX_SPEAK_CHARS]
+        try:
+            wav = await run_in_threadpool(voice.speak, text)
+        except VoiceUnavailable as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from None
+        return Response(content=wav, media_type="audio/wav")
 
     @app.websocket("/ws")
     async def ws_endpoint(ws: WebSocket) -> None:

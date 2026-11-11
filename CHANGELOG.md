@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.4.0 — Voice and a new interface (2026-11-11)
+
+Added
+- Voice: talk to JARVIS with the microphone button or Ctrl+Space, and hear
+  replies in a British voice. Recognition (Whisper) and speech (Piper) run
+  locally. `python -m jarvis voice-setup` downloads and tests the models.
+- Replies are spoken sentence by sentence as they arrive; code blocks are
+  skipped; speaking over JARVIS interrupts it; a mute button silences it.
+- New HUD-style interface with an animated orb that shows what JARVIS is
+  doing (standing by, listening, thinking, speaking, awaiting approval,
+  halted) and reacts to the sound level.
+
+Notes
+- Tested in a browser with a simulated microphone. Not yet verified: the
+  microphone permission prompt inside the native Windows window.
+- The speech libraries do not yet support Python 3.15; use 3.14 for voice.
+
 ## 0.3.1 — Fix follow-up messages on the IFM service (2026-11-11)
 
 Fixed

@@ -6,6 +6,7 @@
   stop     EMERGENCY STOP: halt a running JARVIS from any terminal
   resume   clear the emergency stop
   log [n]  show the last n actions
+  voice-setup  download the speech models and test them
 """
 
 from __future__ import annotations
@@ -39,6 +40,11 @@ def main(argv: list[str] | None = None) -> int:
             n = int(argv[1]) if len(argv) > 1 and argv[1].isdigit() else 20
             print(format_entries(log.tail(n)))
         return 0
+
+    if command == "voice-setup":
+        from jarvis.voice.engine import setup
+
+        return setup(load_settings())
 
     if command not in ("app", "web", "chat"):
         print(__doc__)

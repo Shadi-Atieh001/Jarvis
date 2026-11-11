@@ -93,6 +93,36 @@ setx ANTHROPIC_API_KEY "your-key-here"
 Open a new terminal so the key is picked up. This uses `claude-fable-5-2`
 and is billed per use by Anthropic.
 
+## Voice
+
+Click the microphone (or press Ctrl+Space), speak, and stop talking; JARVIS
+transcribes what you said, and answers aloud when you spoke to it. Clicking
+the microphone while it is talking interrupts it. Speech recognition
+(Whisper) and the British voice (Piper) both run on your computer.
+
+One-time setup:
+
+```powershell
+pip install -e ".[voice]"
+python -m jarvis voice-setup
+```
+
+`voice-setup` downloads the models (about 210 MB), then says a sentence and
+listens to itself to confirm both directions work.
+
+- **Python 3.15 is too new for the speech libraries.** If `pip install`
+  fails on `onnxruntime`, install Python 3.14 (`winget install
+  Python.Python.3.14`), delete the `.venv` folder, recreate it with
+  `py -3.14 -m venv .venv`, and install again.
+- **Approving actions is by click only.** Saying "yes" aloud does not
+  approve a permission prompt, so nothing overheard can authorise an action.
+- **If the voice is missing** JARVIS falls back to the voice built into
+  Windows. If recognition is missing, the microphone button is disabled.
+- Settings are under `[voice]` in `settings.toml`: recognition model,
+  voice, and when to answer aloud (`when_spoken`, `always`, `never`).
+
+The wake word ("Hey Jarvis") is not built yet; it comes next.
+
 ## Running
 
 | Command | What it does |
@@ -103,6 +133,7 @@ and is billed per use by Anthropic.
 | `python -m jarvis stop` | **Emergency stop**, from any terminal |
 | `python -m jarvis resume` | Clears the emergency stop |
 | `python -m jarvis log 50` | Shows the last 50 actions |
+| `python -m jarvis voice-setup` | Downloads and tests the speech models |
 | `python -m pytest` | Runs the tests |
 
 Inside a chat, type `/help` for commands: `/tools`, `/log`, `/stop`,
@@ -179,6 +210,7 @@ jarvis/
     killswitch.py    the emergency stop
     commands.py      /slash commands
     config.py        reads settings.toml
+  voice/engine.py    speech-to-text and text-to-speech
   tools/             one file per group of tools
   ui/
     terminal.py      terminal chat
