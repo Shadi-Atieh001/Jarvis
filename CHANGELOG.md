@@ -10,6 +10,9 @@ Added
 - The action log now scrubs the value of every environment variable whose
   name ends in `_API_KEY`, `_TOKEN` or `_SECRET`.
 
+- The shipped `settings.toml` now points at the IFM service
+  (`https://api.ifm.ai/v1`, model `IFM/K2-Horizon-375B-A23B`).
+
 Not yet verified against a real service; tested with a stand-in server.
 
 ## 0.2.1 — Faster local replies (2026-11-10)

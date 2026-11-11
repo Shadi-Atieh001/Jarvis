@@ -10,7 +10,7 @@ address_as = "Sir"
 #                (see [openai_compatible] below)
 #   "anthropic"  Claude through the Anthropic API: far more capable, paid,
 #                needs the ANTHROPIC_API_KEY environment variable
-provider = "ollama"
+provider = "openai_compatible"
 # The settings from here to max_steps apply to "anthropic" only.
 model = "claude-fable-5-2"
 # How hard the model thinks: low | medium | high | xhigh | max.
@@ -45,8 +45,8 @@ keep_alive = "30m"
 # base_url is the address from the service's API documentation, ending in /v1
 # (JARVIS adds /chat/completions). model is the model's name on that service.
 # The model must support tool (function) calling.
-base_url = ""
-model = ""
+base_url = "https://api.ifm.ai/v1"
+model = "IFM/K2-Horizon-375B-A23B"
 # The NAME of the environment variable holding your key, never the key
 # itself. Store the key with:  setx JARVIS_API_KEY "your-key-here"
 api_key_env = "JARVIS_API_KEY"
