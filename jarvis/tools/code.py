@@ -51,6 +51,7 @@ def _describe(args: dict, ctx: ToolContext) -> str:
         "additionalProperties": False,
     },
     tier=CONFIRM,
+    kind="execute",
     describe=_describe,
     blockable_text=_script_text,
 )

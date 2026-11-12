@@ -8,14 +8,18 @@ Tiers:
   confirm  show the user exactly what will happen and wait for "yes"
   blocked  never run
 
-How the tier for one call is worked out:
-  1. Start from settings.toml ([permissions.tools]), else the tool's own
-     default, else [permissions] default.
-  2. The tool's escalate() hook may raise it (e.g. overwriting a file).
-  3. If untrusted content was read earlier in this request, anything that
-     is not read-only is raised to confirm.
-  4. If the command/code matches a blocked pattern, it is blocked.
-A step can only make the result stricter, never looser.
+Modes ([permissions] mode in settings.toml):
+  careful       each tool follows its own tier; risky calls (overwriting,
+                working outside the workspace) ask
+  trusted       everything runs without asking except deleting and sending.
+                After a web page or outside file has been read, anything
+                that changes, runs or controls something asks for the rest
+                of that request.
+  unrestricted  nothing asks
+Blocked patterns, and anything a tool marks as blocked (such as typing a
+payment card number), are refused in every mode.
+
+A per-tool entry under [permissions.tools] overrides the mode for that tool.
 """
 
 from __future__ import annotations
@@ -26,6 +30,9 @@ from dataclasses import dataclass
 
 from .config import Settings
 from .tools import AUTO, BLOCKED, CONFIRM, TIER_ORDER, Tool, ToolContext
+
+
+MODES = ("careful", "trusted", "unrestricted")
 
 
 @dataclass
@@ -49,36 +56,53 @@ class PermissionGate:
 
     def decide(self, tool: Tool, args: dict, ctx: ToolContext) -> Decision:
         description = self._describe(tool, args, ctx)
+        mode = self.settings.permission_mode
+        if mode not in MODES or not tool.kind:
+            mode = "careful"  # unknown mode, or a tool that has not said what it does
 
+        # 1. The starting tier.
         configured = self.settings.tool_tiers.get(tool.name)
-        tier = configured or tool.tier or self.settings.default_tier
         if configured:
-            reason = f'{tool.name} is set to "{tier}" in settings.toml'
-        else:
+            tier, reason = configured, f'{tool.name} is set to "{configured}" in settings.toml'
+        elif mode == "careful":
+            tier = tool.tier or self.settings.default_tier
             reason = f'{tool.name} is "{tier}" by default'
+        elif mode == "trusted":
+            tier = CONFIRM if tool.kind in ("delete", "send") else AUTO
+            reason = f'"{tool.kind}" actions ask first in trusted mode'
+        else:  # unrestricted
+            tier, reason = AUTO, "unrestricted mode"
         if tier not in TIER_ORDER:
             # A typo in settings.toml must fail safe, not open.
             tier, reason = CONFIRM, f"settings.toml has an unknown tier {tier!r}"
 
+        # 2. The tool's own view of this particular call.
         if tool.escalate is not None:
+            strict = True
             try:
                 raised = tool.escalate(args, ctx)
                 why = "this particular call is riskier than usual"
-                if isinstance(raised, tuple):  # (tier, explanation)
-                    raised, why = raised
+                if isinstance(raised, tuple):
+                    strict = len(raised) > 2 and raised[2] == "strict"
+                    raised, why = raised[0], raised[1]
             except Exception as exc:  # a broken hook must fail safe
                 raised, why = CONFIRM, f"could not assess the risk ({exc})"
-            if raised in TIER_ORDER and TIER_ORDER[raised] > TIER_ORDER[tier]:
+            applies = (
+                raised == BLOCKED
+                or mode == "careful"
+                or (mode == "trusted" and strict)
+            )
+            if applies and raised in TIER_ORDER and TIER_ORDER[raised] > TIER_ORDER[tier]:
                 tier, reason = raised, why
 
-        if (
-            self.tainted
-            and self.settings.confirm_after_untrusted
-            and not tool.read_only
-            and tier == AUTO
-        ):
-            tier, reason = CONFIRM, "untrusted content was read earlier in this request"
+        # 3. Untrusted content read earlier in this request.
+        if self.tainted and self.settings.confirm_after_untrusted and tier == AUTO:
+            if mode == "careful" and not tool.read_only:
+                tier, reason = CONFIRM, "untrusted content was read earlier in this request"
+            elif mode == "trusted" and tool.kind not in ("read", "launch"):
+                tier, reason = CONFIRM, "a web page or outside file was read earlier in this request"
 
+        # 4. Blocked patterns, in every mode.
         if tool.blockable_text is not None:
             text = tool.blockable_text(args, ctx)
             for pattern in self._blocked:

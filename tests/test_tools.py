@@ -16,7 +16,10 @@ def test_plugin_loader_finds_all_tools(registry):
     assert set(registry.tools) == {
         "read_file", "list_dir", "search_files", "write_file", "make_dir",
         "move_file", "delete_file", "run_command", "run_python",
+        "web_search", "read_page", "open_url",
+        "list_windows", "read_screen", "open_app", "focus_window", "click", "type_text", "press_keys",
     }
+    assert all(t.kind for t in registry.tools.values())  # every built-in tool says what it does
     for d in registry.api_definitions():
         assert d["input_schema"]["type"] == "object" and d["description"]
 

@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.6.0 — Fewer prompts, the web, and the screen (2026-11-12)
+
+Added
+- Permission modes: `careful`, `trusted` (now the default) and
+  `unrestricted`, set with `mode` under `[permissions]`. In trusted mode
+  JARVIS only asks before deleting or sending, and before acting after it
+  has read a web page or outside file.
+- Web tools: `web_search`, `read_page`, `open_url`.
+- Screen tools: `list_windows`, `read_screen`, `open_app`, `focus_window`.
+- Mouse and keyboard tools: `click`, `type_text`, `press_keys`.
+- Typing anything that looks like a payment card number is blocked in every
+  mode.
+
+Changed
+- Each tool now declares what kind of action it is (read, launch, write,
+  execute, control, delete, send); the mode decides how each kind is treated.
+- The per-tool tiers previously listed in `settings.toml` are gone; add a
+  line under `[permissions.tools]` only to override the mode.
+
+Not yet verified
+- Web search could not be tested live from the build machine (search
+  engines block its address); it is tested with stand-in results.
+- The screen, mouse and keyboard tools use Windows UI Automation and were
+  written and tested against a stand-in on Linux. Their first real run is
+  on Windows.
+
 ## 0.5.0 — "Hey Jarvis" (2026-11-12)
 
 Added

@@ -85,6 +85,7 @@ class FakeUI:
 def settings(tmp_path):
     s = load_settings(REPO_ROOT / "settings.toml")  # the real, shipped settings
     s.provider = "anthropic"  # tests script the model through FakeClient
+    s.permission_mode = "careful"  # the strictest mode; other modes are tested explicitly
     s.home = tmp_path / "home"
     s.workspace = (tmp_path / "home" / "workspace").resolve()
     s.workspace.mkdir(parents=True)

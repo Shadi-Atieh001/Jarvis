@@ -122,3 +122,77 @@ def test_untrusted_content_escalates_later_actions(settings, registry, ctx):
     assert tier(gate, registry, ctx, "read_file", {"path": "new.txt"}) == AUTO  # reading stays automatic
     gate.new_request()
     assert tier(gate, registry, ctx, "write_file", args) == AUTO
+
+
+# ------------------------------------------------------------------ modes
+
+
+def test_trusted_mode_runs_everyday_actions_without_asking(settings, registry, ctx, tmp_path):
+    settings.permission_mode = "trusted"
+    gate = PermissionGate(settings)
+    (ctx.workspace / "old.txt").write_text("x")
+    assert tier(gate, registry, ctx, "run_command", {"command": "echo hi"}) == AUTO
+    assert tier(gate, registry, ctx, "run_python", {"code": "print(1)"}) == AUTO
+    assert tier(gate, registry, ctx, "write_file", {"path": "old.txt", "content": "new"}) == AUTO          # overwrite
+    assert tier(gate, registry, ctx, "write_file", {"path": str(tmp_path / "out.txt"), "content": "x"}) == AUTO  # outside
+    assert tier(gate, registry, ctx, "move_file", {"source": "old.txt", "destination": str(tmp_path / "b")}) == AUTO
+
+
+def test_trusted_mode_still_asks_for_deleting_and_sensitive_paths(settings, registry, ctx, tmp_path):
+    settings.permission_mode = "trusted"
+    gate = PermissionGate(settings)
+    assert tier(gate, registry, ctx, "delete_file", {"path": "a.txt"}) == CONFIRM
+    assert tier(gate, registry, ctx, "read_file", {"path": str(tmp_path / ".ssh/id_rsa")}) == CONFIRM
+    assert tier(gate, registry, ctx, "write_file", {"path": str(tmp_path / ".ssh/authorized_keys"), "content": "k"}) == CONFIRM
+
+
+def test_trusted_mode_still_blocks(settings, registry, ctx):
+    settings.permission_mode = "trusted"
+    gate = PermissionGate(settings)
+    assert tier(gate, registry, ctx, "run_command", {"command": "netsh advfirewall set allprofiles state off"}) == BLOCKED
+
+
+def test_trusted_mode_asks_after_untrusted_content(settings, registry, ctx):
+    settings.permission_mode = "trusted"
+    gate = PermissionGate(settings)
+    gate.note_untrusted()
+    assert tier(gate, registry, ctx, "run_command", {"command": "echo hi"}) == CONFIRM
+    assert tier(gate, registry, ctx, "write_file", {"path": "n.txt", "content": "x"}) == CONFIRM
+    assert tier(gate, registry, ctx, "read_file", {"path": "n.txt"}) == AUTO
+    gate.new_request()
+    assert tier(gate, registry, ctx, "run_command", {"command": "echo hi"}) == AUTO
+
+
+def test_unrestricted_mode_asks_nothing_but_still_blocks(settings, registry, ctx, tmp_path):
+    settings.permission_mode = "unrestricted"
+    gate = PermissionGate(settings)
+    gate.note_untrusted()
+    assert tier(gate, registry, ctx, "delete_file", {"path": "a.txt"}) == AUTO
+    assert tier(gate, registry, ctx, "run_command", {"command": "echo hi"}) == AUTO
+    assert tier(gate, registry, ctx, "read_file", {"path": str(tmp_path / ".ssh/id_rsa")}) == AUTO
+    assert tier(gate, registry, ctx, "run_command", {"command": "format C: /q"}) == BLOCKED
+
+
+def test_per_tool_override_beats_the_mode(settings, registry, ctx):
+    settings.permission_mode = "trusted"
+    settings.tool_tiers["run_command"] = "confirm"
+    gate = PermissionGate(settings)
+    assert tier(gate, registry, ctx, "run_command", {"command": "echo hi"}) == CONFIRM
+
+
+def test_unknown_mode_and_untyped_tools_fall_back_to_careful(settings, registry, ctx):
+    from jarvis.core.tools import Tool
+
+    settings.permission_mode = "yolo"
+    gate = PermissionGate(settings)
+    assert tier(gate, registry, ctx, "run_command", {"command": "echo hi"}) == CONFIRM
+    settings.permission_mode = "unrestricted"
+    untyped = Tool("mystery", "", {"type": "object"}, lambda a, c: "x")
+    assert PermissionGate(settings).decide(untyped, {}, ctx).tier == CONFIRM
+
+
+def test_shipped_settings_use_trusted_mode():
+    from jarvis.core.config import REPO_ROOT, load_settings
+
+    s = load_settings(REPO_ROOT / "settings.toml")
+    assert s.permission_mode == "trusted" and s.tool_tiers == {} and s.confirm_after_untrusted is True

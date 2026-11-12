@@ -47,6 +47,7 @@ class Settings:
     home: Path = Path("~/.jarvis")
     workspace: Path = Path("~/.jarvis/workspace")
 
+    permission_mode: str = "careful"  # careful | trusted | unrestricted
     default_tier: str = "confirm"
     confirm_after_untrusted: bool = True
     tool_tiers: dict[str, str] = field(default_factory=dict)
@@ -106,6 +107,7 @@ def load_settings(path: Path | None = None) -> Settings:
     s.home = _expand(paths.get("home", s.home))
     s.workspace = _expand(paths.get("workspace", s.workspace))
 
+    s.permission_mode = perms.get("mode", s.permission_mode)
     s.default_tier = perms.get("default", s.default_tier)
     s.confirm_after_untrusted = perms.get("confirm_after_untrusted", s.confirm_after_untrusted)
     s.tool_tiers = dict(perms.get("tools", {}))

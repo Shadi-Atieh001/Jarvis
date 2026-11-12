@@ -156,44 +156,78 @@ on and off, and the window remembers your choice.
 Inside a chat, type `/help` for commands: `/tools`, `/log`, `/stop`,
 `/resume`, `/clear`, `/quit`.
 
+## What JARVIS can do
+
+| Area | Tools |
+|---|---|
+| Files | read, list, search, write, move, delete |
+| Commands and code | run PowerShell commands; write and run Python in the workspace |
+| Web | search the web, read a page's text, open a page in your browser |
+| Screen | list open windows, read what is in a window, open apps |
+| Mouse and keyboard | click, type, press key combinations |
+
+**How it "sees" the screen.** The current model reads text only, so JARVIS
+does not look at screenshots. It asks Windows what each window contains
+(titles, buttons, menus, text fields and their contents), the same way a
+screen reader does. That works well for ordinary apps and browsers. Apps
+that draw their own interface, such as games, video and images, expose
+little or nothing.
+
+**Web search** uses free public search engines through the `ddgs` library,
+with no account or key. They sometimes rate-limit; if a search fails, wait a
+minute. Pages that need a login or build their content with scripts may
+come back nearly empty; for those, JARVIS can open the page in your browser
+and read it from the screen instead.
+
 ## Permissions
 
 Every tool call goes through one gate (`jarvis/core/permissions.py`) before
 it runs. The gate is ordinary code; the model cannot talk its way past it.
 
-| Tier | Meaning | Phase 1 examples |
+`mode` under `[permissions]` in `settings.toml` sets how much JARVIS may do
+without asking:
+
+| Mode | Runs without asking | Asks first |
 |---|---|---|
-| auto | Runs without asking | Reading, listing and searching files; creating new files in the workspace |
-| confirm | Shows exactly what will happen and waits for your yes | Overwriting or deleting; anything outside the workspace; every shell command and script |
-| blocked | Never runs | Commands that change firewall, antivirus, accounts, boot or disk settings |
+| `careful` | Reading; new files in the workspace | Everything else |
+| `trusted` (default) | Commands, code, files anywhere, opening apps, clicking and typing | Deleting; sending (once email and messaging exist); and see "after reading the web" below |
+| `unrestricted` | Everything | Nothing |
 
-Tiers are set in `settings.toml` under `[permissions.tools]`. Things worth
-knowing:
+In every mode:
 
-- **A tool can escalate a single call.** `write_file` is "auto", but
-  overwriting a file or writing outside the workspace still asks. Settings
-  can make any tool stricter; they cannot switch that escalation off.
-- **Commands and scripts always ask by default.** A command started in the
-  workspace can still reach your whole machine, so there is no safe subset
-  to wave through. You can set `run_python = "auto"` if you accept that risk.
+- **Blocked stays blocked.** Commands that change firewall, antivirus,
+  account, boot or disk settings are refused, and so is typing anything
+  that looks like a payment card number. The command patterns are a
+  backstop rather than a guarantee; a determined attacker could word a
+  command to slip past them.
 - **Sensitive paths** (`.ssh`, `.env`, browser profiles, key files; see
-  `[permissions.sensitive]`) need confirmation even to read, and are left
-  out of content searches.
-- **Blocked patterns are a backstop, not a guarantee.** They are regular
-  expressions over the command text and can be evaded by a determined
-  attacker. The real protection is that you see every command before it runs.
-- **Payments and moving money** have no tool at all, so they cannot happen.
-  When web and browser tools arrive they will be blocked at the tool level.
+  `[permissions.sensitive]`) need confirmation to read or write, except in
+  `unrestricted`.
+- **The Stop button works.**
+
+**After reading the web (trusted mode).** A web page, a search result or a
+file from outside the workspace can contain hidden text written to
+manipulate an assistant, such as "run this command". Once JARVIS has read
+one, it asks before changing files, running commands, clicking or typing
+for the rest of that request. Looking things up, reading the screen and
+opening pages or apps stay automatic. Your next message starts fresh. If
+you would rather never be asked, set `confirm_after_untrusted = false`,
+understanding that a malicious page could then make JARVIS act unseen.
+
+Reading the screen does not trigger this, because JARVIS could not operate
+any app if it did. That is a deliberate trade-off: text on your screen is
+treated as yours.
+
+A per-tool line under `[permissions.tools]` overrides the mode for that
+tool, for example `run_command = "confirm"`.
 
 ### Untrusted content
 
-Text that comes from files and command output (later: web pages and email)
-is wrapped in `<untrusted_data>` tags before the model sees it, and the model
-is told to treat it as information only and to report any instructions it
-finds there. Because a model can still be fooled, there is a second,
-mechanical defence: once JARVIS has read a file from outside the workspace,
-every action that changes anything needs your confirmation for the rest of
-that request (`confirm_after_untrusted` in `settings.toml`).
+Text from files, command output, web pages and the screen is wrapped in
+`<untrusted_data>` tags before the model sees it, and the model is told to
+treat it as information only and to report any instructions it finds there.
+Because a model can still be fooled, the confirmation rule above is the
+mechanical backstop.
 
 ### Emergency stop
 
@@ -228,7 +262,7 @@ jarvis/
     commands.py      /slash commands
     config.py        reads settings.toml
   voice/engine.py    speech-to-text and text-to-speech
-  tools/             one file per group of tools
+  tools/             one file per group of tools: files, shell, code, web, desktop
   ui/
     terminal.py      terminal chat
     server.py        local server behind the window

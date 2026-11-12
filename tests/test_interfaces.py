@@ -14,7 +14,7 @@ def test_commands(make_jarvis):
     assert commands.handle("hello", j) is None
     assert "/log" in commands.handle("/help", j)
     tools = commands.handle("/tools", j)
-    assert "run_command" in tools and "confirm" in tools
+    assert "run_command" in tools and "execute" in tools and "careful" in tools
     j.send("look", FakeUI())
     assert "list_dir" in commands.handle("/log", j)
     assert "engaged" in commands.handle("/stop", j) and j.kill.tripped

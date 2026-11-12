@@ -34,7 +34,7 @@ def _is_sensitive(path: Path, ctx: ToolContext) -> bool:
 def _escalate_read(key: str = "path"):
     def check(args: dict, ctx: ToolContext):
         if _is_sensitive(ctx.resolve(args.get(key) or "."), ctx):
-            return CONFIRM, "this path is on the sensitive list in settings.toml"
+            return CONFIRM, "this path is on the sensitive list in settings.toml", "strict"
         return None
 
     return check
@@ -62,6 +62,7 @@ def _outside(path: Path, ctx: ToolContext) -> bool:
     },
     tier=AUTO,
     read_only=True,
+    kind="read",
     escalate=_escalate_read(),
     describe=lambda a, c: f"Read {c.resolve(a['path'])}",
 )
@@ -100,6 +101,7 @@ def read_file(args: dict, ctx: ToolContext) -> ToolResult:
     },
     tier=AUTO,
     read_only=True,
+    kind="read",
     escalate=_escalate_read(),
     describe=lambda a, c: f"List {c.resolve(a.get('path') or '.')}",
 )
@@ -136,6 +138,7 @@ def list_dir(args: dict, ctx: ToolContext) -> ToolResult:
     },
     tier=AUTO,
     read_only=True,
+    kind="read",
     escalate=_escalate_read(),
     describe=lambda a, c: f"Search {c.resolve(a.get('path') or '.')}",
 )
@@ -190,12 +193,12 @@ def search_files(args: dict, ctx: ToolContext) -> ToolResult:
 
 def _escalate_write(args: dict, ctx: ToolContext):
     path = ctx.resolve(args["path"])
+    if _is_sensitive(path, ctx):
+        return CONFIRM, "this path is on the sensitive list in settings.toml", "strict"
     if _outside(path, ctx):
         return CONFIRM, "it writes outside the workspace"
     if path.exists():
         return CONFIRM, "it overwrites an existing file"
-    if _is_sensitive(path, ctx):
-        return CONFIRM, "this path is on the sensitive list in settings.toml"
     return None
 
 
@@ -228,6 +231,7 @@ def _describe_write(args: dict, ctx: ToolContext) -> str:
         "additionalProperties": False,
     },
     tier=AUTO,
+    kind="write",
     escalate=_escalate_write,
     describe=_describe_write,
 )
@@ -251,6 +255,7 @@ def write_file(args: dict, ctx: ToolContext) -> ToolResult:
         "additionalProperties": False,
     },
     tier=AUTO,
+    kind="write",
     escalate=lambda a, c: (CONFIRM, "it is outside the workspace") if _outside(c.resolve(a["path"]), c) else None,
     describe=lambda a, c: f"Create the folder {c.resolve(a['path'])}",
 )
@@ -283,6 +288,7 @@ def _escalate_move(args: dict, ctx: ToolContext):
         "additionalProperties": False,
     },
     tier=AUTO,
+    kind="write",
     escalate=_escalate_move,
     describe=lambda a, c: (
         f"Move {c.resolve(a['source'])}\n  to {c.resolve(a['destination'])}"
@@ -327,6 +333,7 @@ def _describe_delete(args: dict, ctx: ToolContext) -> str:
         "additionalProperties": False,
     },
     tier=CONFIRM,
+    kind="delete",
     describe=_describe_delete,
 )
 def delete_file(args: dict, ctx: ToolContext) -> ToolResult:

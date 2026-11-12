@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 
 AUTO, CONFIRM, BLOCKED = "auto", "confirm", "blocked"
 TIER_ORDER = {AUTO: 0, CONFIRM: 1, BLOCKED: 2}
+KINDS = ("", "read", "launch", "write", "execute", "control", "delete", "send")
 
 
 def stricter(a: str, b: str) -> str:
@@ -70,7 +71,19 @@ class Tool:
     func: Callable[[dict, ToolContext], ToolResult | str]
     tier: str | None = None  # None means: use [permissions] default
     read_only: bool = False
-    # Optional: (args, ctx) -> tier, or (tier, why). May only make a call stricter.
+    # What sort of action this is. The permission mode in settings.toml
+    # decides how each kind is treated:
+    #   read     looks at something, changes nothing
+    #   launch   opens an app or a web page for you to look at
+    #   write    creates or changes files
+    #   execute  runs commands or code
+    #   control  moves the mouse or types for you
+    #   delete   removes something
+    #   send     sends or posts something to other people
+    # Leave empty for a tool that should always follow its own tier.
+    kind: str = ""
+    # Optional: (args, ctx) -> tier, (tier, why) or (tier, why, "strict").
+    # May only make a call stricter. "strict" ones apply in trusted mode too.
     escalate: Callable[[dict, ToolContext], str | None] | None = None
     # Optional: (args, ctx) -> text shown to the user when asking permission.
     describe: Callable[[dict, ToolContext], str] | None = None
@@ -95,18 +108,21 @@ def tool(
     input_schema: dict,
     tier: str | None = None,
     read_only: bool = False,
+    kind: str = "",
     escalate=None,
     describe=None,
     blockable_text=None,
 ):
     """Register a function as a JARVIS tool."""
+    if kind not in KINDS:
+        raise ValueError(f"Unknown kind {kind!r} for tool {name}")
     if tier is not None and tier not in TIER_ORDER:
         raise ValueError(f"Unknown tier {tier!r} for tool {name}")
 
     def decorator(func):
         # The loader finds tools by looking for this attribute.
         func.jarvis_tool = Tool(
-            name, description, input_schema, func, tier, read_only, escalate, describe, blockable_text
+            name, description, input_schema, func, tier, read_only, kind, escalate, describe, blockable_text
         )
         return func
 

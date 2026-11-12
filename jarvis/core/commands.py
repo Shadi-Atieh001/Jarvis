@@ -34,10 +34,13 @@ def handle(text: str, jarvis: Jarvis) -> str | None:
         rows = []
         for name in sorted(jarvis.registry.tools):
             t = jarvis.registry.tools[name]
-            tier = jarvis.settings.tool_tiers.get(name) or t.tier or jarvis.settings.default_tier
-            note = " (may ask for riskier calls)" if t.escalate and tier == "auto" else ""
-            rows.append(f"  {name:<14} {tier}{note}")
-        return "Tools and their tiers:\n" + "\n".join(rows)
+            override = jarvis.settings.tool_tiers.get(name)
+            detail = f'set to "{override}" in settings.toml' if override else (t.kind or "follows its own tier")
+            rows.append(f"  {name:<15} {detail}")
+        return (
+            f'Permission mode: {jarvis.settings.permission_mode}\n'
+            "Tools and the kind of action each performs:\n" + "\n".join(rows)
+        )
     if cmd == "/log":
         n = int(args[0]) if args and args[0].isdigit() else 20
         return format_entries(jarvis.log.tail(n))

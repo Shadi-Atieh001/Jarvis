@@ -78,28 +78,29 @@ home = "~/.jarvis"
 workspace = "~/.jarvis/workspace"
 
 [permissions]
-# Tier used for any tool that is not listed below and declares none itself.
+# How much JARVIS may do without asking:
+#   "careful"       asks before overwriting, deleting, running any command,
+#                   or touching anything outside the workspace
+#   "trusted"       asks only before deleting or sending. After it has read
+#                   a web page or a file from outside the workspace, it also
+#                   asks before changing, running or controlling anything
+#                   for the rest of that request (see below).
+#   "unrestricted"  never asks
+# In every mode: blocked commands stay blocked, sensitive files are
+# protected, and the Stop button works.
+mode = "trusted"
+# Tier for tools that do not say what kind of action they are.
 default = "confirm"
-# After JARVIS reads untrusted content (files outside the workspace, and later
-# web pages and email), every action that changes anything needs your "yes"
-# for the rest of that request, even if it is normally automatic.
+# Web pages and files can contain hidden instructions aimed at JARVIS. With
+# this on, once such content has been read, later actions in the same
+# request need your "yes". Turning it off means a malicious page could make
+# JARVIS act without you seeing it first.
 confirm_after_untrusted = true
 
-# Per-tool tiers: "auto" | "confirm" | "blocked".
-# A tool can still escalate above its tier for a risky call (for example,
-# write_file is "auto" but asks before overwriting or writing outside the
-# workspace). You can make any tool stricter here. Making run_command or
-# run_python "auto" means JARVIS can execute arbitrary code without asking.
+# Optional per-tool overrides: "auto" | "confirm" | "blocked". Examples:
+#   run_command = "confirm"   always ask before running a command
+#   delete_file = "auto"      delete without asking
 [permissions.tools]
-read_file = "auto"
-list_dir = "auto"
-search_files = "auto"
-write_file = "auto"
-make_dir = "auto"
-move_file = "auto"
-delete_file = "confirm"
-run_command = "confirm"
-run_python = "confirm"
 
 [permissions.sensitive]
 # Reading anything matching these patterns needs confirmation.

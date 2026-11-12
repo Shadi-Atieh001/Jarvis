@@ -102,6 +102,7 @@ def run_process(argv: list[str], cwd, timeout: int, ctx: ToolContext) -> ToolRes
         "additionalProperties": False,
     },
     tier=CONFIRM,
+    kind="execute",
     describe=lambda a, c: f"Run this command in {c.resolve(a.get('cwd') or '.')}:\n\n{a['command']}",
     blockable_text=lambda a, c: a["command"],
 )
