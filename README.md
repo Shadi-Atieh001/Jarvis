@@ -93,6 +93,33 @@ setx ANTHROPIC_API_KEY "your-key-here"
 Open a new terminal so the key is picked up. This uses `claude-fable-5-2`
 and is billed per use by Anthropic.
 
+## Memory
+
+JARVIS remembers across conversations. Tell it things ("my sister is called
+Layla", "I prefer short answers") and it saves them; facts that look
+relevant to a new request are passed to the model with it. It also keeps a
+record of past requests and replies, which it can search when you refer to
+something from before.
+
+| Command | What it does |
+|---|---|
+| `/memories` | Lists everything remembered |
+| `/memories sister` | Lists memories related to a word or phrase |
+| `/forget 3` | Deletes memory number 3 |
+| `/forget all` | Deletes every memory and the record of past exchanges |
+
+- Everything is in one file on your computer, `~/.jarvis/memory.db`.
+  Deleting that file also erases all memory.
+- Memories relevant to a request are sent to the model along with it. With
+  a hosted model, that means they leave your computer at that point.
+- Passwords and keys are scrubbed before saving.
+- Search is by meaning, using a small model that runs locally (about
+  65 MB, downloaded by `python -m jarvis setup`). Without it, search falls
+  back to matching words.
+- In trusted mode, saving a memory needs your approval if JARVIS has just
+  read a web page, so a page cannot plant false "facts".
+- `enabled = false` under `[memory]` in `settings.toml` turns it all off.
+
 ## Voice
 
 Click the microphone (or press Ctrl+Space), speak, and stop talking; JARVIS
@@ -103,12 +130,12 @@ the microphone while it is talking interrupts it. Speech recognition
 One-time setup:
 
 ```powershell
-pip install -e ".[voice]"
-python -m jarvis voice-setup
+pip install -e ".[desktop,memory,voice,dev]"
+python -m jarvis setup
 ```
 
-`voice-setup` downloads the models (about 210 MB), then says a sentence and
-listens to itself to confirm both directions work.
+`setup` downloads the models (about 280 MB including memory), then says a
+sentence and listens to itself to confirm both directions work.
 
 - **Python 3.15 is too new for the speech libraries.** If `pip install`
   fails on `onnxruntime`, install Python 3.14 (`winget install
@@ -150,7 +177,7 @@ on and off, and the window remembers your choice.
 | `python -m jarvis stop` | **Emergency stop**, from any terminal |
 | `python -m jarvis resume` | Clears the emergency stop |
 | `python -m jarvis log 50` | Shows the last 50 actions |
-| `python -m jarvis voice-setup` | Downloads and tests the speech models |
+| `python -m jarvis setup` | Downloads and tests the memory and speech models |
 | `python -m pytest` | Runs the tests |
 
 Inside a chat, type `/help` for commands: `/tools`, `/log`, `/stop`,
@@ -261,6 +288,7 @@ jarvis/
     killswitch.py    the emergency stop
     commands.py      /slash commands
     config.py        reads settings.toml
+  memory/store.py    long-term memory (SQLite and local embeddings)
   voice/engine.py    speech-to-text and text-to-speech
   tools/             one file per group of tools: files, shell, code, web, desktop
   ui/

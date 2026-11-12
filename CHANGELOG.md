@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.0 — Memory (2026-11-12)
+
+Added
+- Long-term memory in `~/.jarvis/memory.db`: saved facts (preferences,
+  people, projects) and a searchable record of past exchanges.
+- Tools `remember`, `recall`, `forget`; commands `/memories` and `/forget`.
+- Relevant memories are included with each request automatically.
+- Search by meaning with a local embedding model (`.[memory]` extra), with
+  a word-matching fallback when it is not installed.
+- `python -m jarvis setup` downloads and tests the memory and speech models
+  (`voice-setup` still works).
+
 ## 0.6.0 — Fewer prompts, the web, and the screen (2026-11-12)
 
 Added

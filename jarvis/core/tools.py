@@ -32,6 +32,7 @@ class ToolContext:
 
     settings: "Settings"
     kill: "KillSwitch"
+    memory: Any = None  # the MemoryStore, for the memory tools
 
     @property
     def workspace(self) -> Path:

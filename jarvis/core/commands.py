@@ -8,11 +8,14 @@ from __future__ import annotations
 
 from .actionlog import format_entries
 from .agent import Jarvis
+from jarvis.memory.store import format_memories
 
 HELP = """Commands:
   /help            show this list
   /tools           list the tools JARVIS has and their permission tiers
   /log [n]         show the last n actions (default 20)
+  /memories [text] show what JARVIS remembers (optionally: about text)
+  /forget <number> delete one memory;  /forget all  deletes everything
   /stop            emergency stop: halt everything and refuse further actions
   /resume          clear the emergency stop
   /clear           start a fresh conversation
@@ -44,6 +47,37 @@ def handle(text: str, jarvis: Jarvis) -> str | None:
     if cmd == "/log":
         n = int(args[0]) if args and args[0].isdigit() else 20
         return format_entries(jarvis.log.tail(n))
+    if cmd in ("/memories", "/memory"):
+        if jarvis.memory is None:
+            return "Memory is switched off in settings.toml."
+        facts, past = jarvis.memory.counts()
+        if args:
+            found = jarvis.memory.search(" ".join(args), limit=20)
+            return f"Memories about {' '.join(args)!r}:\n" + format_memories(found)
+        note = "" if jarvis.memory.semantic else "\n(Searching by matching words; install the memory extra for search by meaning.)"
+        return (
+            f"{facts} saved memories, {past} past exchanges on record.\n"
+            + format_memories(jarvis.memory.all())
+            + "\nDelete one with /forget <number>, or everything with /forget all."
+            + note
+        )
+    if cmd == "/forget":
+        if jarvis.memory is None:
+            return "Memory is switched off in settings.toml."
+        if args and args[0].lower() == "all":
+            if len(args) < 2 or args[1].lower() != "yes":
+                facts, past = jarvis.memory.counts()
+                return f"This deletes all {facts} memories and {past} past exchanges for good. Type  /forget all yes  to confirm."
+            count = jarvis.memory.forget_everything()
+            jarvis.log.record("memory", detail=f"all memory deleted by command ({count} memories)")
+            return "Everything has been forgotten."
+        if not args or not args[0].lstrip("#").isdigit():
+            return "Usage: /forget <number>   (see /memories for the numbers)"
+        number = int(args[0].lstrip("#"))
+        if jarvis.memory.forget(number):
+            jarvis.log.record("memory", detail=f"memory #{number} deleted by command")
+            return f"Forgot memory #{number}."
+        return f"There is no memory #{number}."
     if cmd == "/stop":
         jarvis.kill.trip()
         jarvis.log.record("kill_switch", detail="tripped by /stop")

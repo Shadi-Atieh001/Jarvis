@@ -19,6 +19,7 @@ from .actionlog import ActionLog
 from .brains import make_brain
 from .config import Settings
 from .killswitch import KillSwitch, Stopped
+from jarvis.memory.store import MemoryStore
 from .permissions import Decision, PermissionGate
 from .persona import build_system_prompt
 from .tools import AUTO, BLOCKED, CONFIRM, ToolContext, ToolRegistry, ToolResult
@@ -48,7 +49,8 @@ class Jarvis:
         self.log = log
         self.kill = kill
         self.gate = PermissionGate(settings)
-        self.ctx = ToolContext(settings=settings, kill=kill)
+        self.memory = MemoryStore(settings) if settings.memory_enabled else None
+        self.ctx = ToolContext(settings=settings, kill=kill, memory=self.memory)
         self.system_prompt = build_system_prompt(settings)
         self.messages: list[dict] = []
         self.brain = make_brain(settings, client)
@@ -64,9 +66,20 @@ class Jarvis:
         self.log.record("user_message", text=user_text)
         self.gate.new_request()
         now = datetime.now().astimezone().strftime("%A %d %B %Y, %H:%M %Z")
-        self.messages.append(
-            {"role": "user", "content": f"<current_time>{now}</current_time>\n{user_text}"}
-        )
+        # Context is added to the user's message rather than the system
+        # prompt, so the system prompt never changes and stays cached.
+        context = f"<current_time>{now}</current_time>\n"
+        if self.memory is not None:
+            try:
+                remembered = self.memory.relevant(user_text)
+            except Exception as exc:  # memory must never stop a request
+                remembered = []
+                self.log.record("error", detail=f"memory lookup failed: {exc}")
+            if remembered:
+                facts = "\n".join(f"#{m['id']} [{m['kind']}] {m['text']}" for m in remembered)
+                context += f"<remembered>\n{facts}\n</remembered>\n"
+        self.messages.append({"role": "user", "content": context + user_text})
+        first_new = len(self.messages)
         try:
             status = self._loop(ui)
         except Stopped:
@@ -77,7 +90,20 @@ class Jarvis:
             # state the next request can continue from, then pass the error on.
             self._repair_history()
             raise
+        if self.memory is not None and status == "done":
+            try:
+                self.memory.save_exchange(user_text, self._reply_text(first_new))
+            except Exception as exc:
+                self.log.record("error", detail=f"could not save the exchange to memory: {exc}")
         return status
+
+    def _reply_text(self, start: int) -> str:
+        """The text JARVIS said in the messages from index `start` onwards."""
+        parts = []
+        for message in self.messages[start:]:
+            if message["role"] == "assistant" and isinstance(message["content"], list):
+                parts += [b.text for b in message["content"] if getattr(b, "type", None) == "text"]
+        return "\n".join(p.strip() for p in parts if p.strip())
 
     def _repair_history(self) -> None:
         """Every tool call the model made must have a result in the history."""

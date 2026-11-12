@@ -81,6 +81,16 @@ class FakeUI:
         return self.approve(tool_name, decision) if callable(self.approve) else self.approve
 
 
+@pytest.fixture(autouse=True)
+def no_embedding_model(request, monkeypatch):
+    """Tests use word-matching memory search, so nothing is downloaded.
+    A test marked real_embeddings opts out."""
+    if "real_embeddings" not in request.keywords:
+        from jarvis.memory.store import MemoryStore
+
+        monkeypatch.setattr(MemoryStore, "_model", lambda self: None)
+
+
 @pytest.fixture
 def settings(tmp_path):
     s = load_settings(REPO_ROOT / "settings.toml")  # the real, shipped settings

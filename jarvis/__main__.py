@@ -6,7 +6,7 @@
   stop     EMERGENCY STOP: halt a running JARVIS from any terminal
   resume   clear the emergency stop
   log [n]  show the last n actions
-  voice-setup  download the speech models and test them
+  setup    download and test the memory and speech models (run once)
 """
 
 from __future__ import annotations
@@ -41,10 +41,22 @@ def main(argv: list[str] | None = None) -> int:
             print(format_entries(log.tail(n)))
         return 0
 
-    if command == "voice-setup":
+    if command in ("setup", "voice-setup"):
+        settings = load_settings()
+        result = 0
+        if command == "setup" and settings.memory_enabled:
+            from jarvis.memory.store import MemoryStore
+
+            print("Loading the memory model (first run downloads about 65 MB) ...")
+            store = MemoryStore(settings)
+            if store.semantic:
+                print("Memory is ready (search by meaning).")
+            else:
+                print('Memory will search by matching words. For search by meaning run:  pip install -e ".[memory]"')
+                result = 1
         from jarvis.voice.engine import setup
 
-        return setup(load_settings())
+        return setup(settings) or result
 
     if command not in ("app", "web", "chat"):
         print(__doc__)

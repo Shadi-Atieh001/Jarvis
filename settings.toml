@@ -51,6 +51,12 @@ model = "IFM/K2-Horizon-375B-A23B"
 # itself. Store the key with:  setx JARVIS_API_KEY "your-key-here"
 api_key_env = "JARVIS_API_KEY"
 
+[memory]
+# Remember your preferences, people and projects between conversations, and
+# keep a searchable record of past requests. Stored on this computer in
+# ~/.jarvis/memory.db. View with /memories, delete with /forget.
+enabled = true
+
 [voice]
 # Speech runs entirely on this computer. Set up once with:
 #   python -m jarvis voice-setup
