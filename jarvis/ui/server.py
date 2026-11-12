@@ -37,6 +37,7 @@ from jarvis.scheduler.runner import Scheduler
 from jarvis.scheduler.store import describe_when
 from jarvis.voice.engine import Voice, VoiceUnavailable
 
+PREFERRED_PORT = 47821
 MAX_AUDIO_BYTES = 20_000_000  # about ten minutes of speech
 MAX_SPEAK_CHARS = 2000
 
@@ -446,10 +447,18 @@ def serve(jarvis: Jarvis, port: int = 0) -> tuple[threading.Thread, str, FastAPI
 
     import uvicorn
 
-    if port == 0:  # ask the OS for a free port
-        with socket.socket() as s:
-            s.bind(("127.0.0.1", 0))
-            port = s.getsockname()[1]
+    if port == 0:
+        # Use the same port every time if we can. The window remembers
+        # permissions (such as the microphone) per address, so a port that
+        # changed on every start would mean being asked on every start.
+        for candidate in (PREFERRED_PORT, 0):  # 0 asks the OS for any free port
+            try:
+                with socket.socket() as s:
+                    s.bind(("127.0.0.1", candidate))
+                    port = s.getsockname()[1]
+                break
+            except OSError:
+                continue
     app = create_app(jarvis)
     app.state.scheduler.start()
     config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")

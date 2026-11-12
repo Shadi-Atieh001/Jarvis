@@ -120,3 +120,35 @@ def test_stop_button_cancels_pending_confirmation(make_jarvis):
         assert ws.receive_json()["type"] == "done"
         ws.send_json({"type": "user", "text": "/resume"})
         assert "cleared" in ws.receive_json()["text"]
+
+
+def test_server_prefers_the_same_port_every_time(make_jarvis):
+    """A stable address lets the window remember microphone permission."""
+    import socket
+    import time
+
+    from jarvis.ui import server
+
+    j, _ = make_jarvis()
+    with socket.socket() as probe:  # find a port that is free right now
+        probe.bind(("127.0.0.1", 0))
+        free = probe.getsockname()[1]
+    original, server.PREFERRED_PORT = server.PREFERRED_PORT, free
+    try:
+        _, url, app = server.serve(j)
+        app.state.scheduler.stop()
+        assert url == f"http://127.0.0.1:{free}/"
+        deadline = time.monotonic() + 10  # wait until the first server is really listening
+        while True:
+            try:
+                socket.create_connection(("127.0.0.1", free), timeout=0.2).close()
+                break
+            except OSError:
+                assert time.monotonic() < deadline, "server did not start"
+                time.sleep(0.05)
+        # If that port is taken (here, by the server we just started), fall back to another.
+        _, url2, app2 = server.serve(j)
+        app2.state.scheduler.stop()
+        assert url2 != url and url2.startswith("http://127.0.0.1:")
+    finally:
+        server.PREFERRED_PORT = original

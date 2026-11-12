@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.11.1 — Stop asking for the microphone on every start (2026-11-12)
+
+Fixed
+- The window asked for microphone permission each time JARVIS started.
+  Two causes: it used a different port (so a different address) on every
+  start, and it ran as a private window that forgets its settings on exit.
+  It now prefers a fixed port (47821), keeps its settings in
+  `~/.jarvis/webview`, and answers the permission question for its own page
+  automatically where the browser control allows.
+
+Not yet verified: this is Windows-only code and untested here.
+
 ## 0.11.0 — A heads-up-display window (2026-11-12)
 
 Changed

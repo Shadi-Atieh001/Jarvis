@@ -38,6 +38,7 @@ def run_window(jarvis: Jarvis, start_hidden: bool = False) -> None:
     time.sleep(0.5)  # give the server a moment to start listening
     state = {"quitting": False, "told": False}
     window = webview.create_window("JARVIS", url, width=1180, height=780, min_size=(480, 480), hidden=start_hidden)
+    _allow_microphone(window, jarvis, url)
     tray = _start_tray(window, jarvis, app, state)
 
     if tray is not None:
@@ -52,13 +53,59 @@ def run_window(jarvis: Jarvis, start_hidden: bool = False) -> None:
 
         window.events.closing += on_closing
 
-    webview.start()  # blocks until the window is destroyed
+    # private_mode=False with a storage folder makes the window keep its
+    # settings between runs, including "Allow" for the microphone. (The
+    # default is a private window that forgets everything on exit.)
+    storage = jarvis.settings.home / "webview"
+    storage.mkdir(parents=True, exist_ok=True)
+    webview.start(private_mode=False, storage_path=str(storage))  # blocks until the window is destroyed
     app.state.scheduler.stop()
     if tray is not None:
         try:
             tray.stop()
         except Exception:
             pass
+
+
+def _allow_microphone(window, jarvis: Jarvis, url: str) -> None:
+    """Answer the browser engine's "wants to use your microphone" question
+    for JARVIS's own page automatically, so it is never shown.
+
+    This reaches into the Windows browser control (WebView2) that pywebview
+    wraps. If anything about that differs from what is expected, it does
+    nothing, and the remembered "Allow" (see private_mode below) still
+    means you are asked at most once.
+    """
+    origin = url.rstrip("/")
+    keep = []  # keeps the handler alive for as long as the window exists
+
+    def attach(*_):
+        if keep:
+            return
+        try:
+            from Microsoft.Web.WebView2.Core import CoreWebView2PermissionKind, CoreWebView2PermissionState
+            from System import Func, Type
+
+            form = window.native
+            core = form.browser.webview.CoreWebView2
+
+            def on_permission(sender, args):
+                if args.PermissionKind == CoreWebView2PermissionKind.Microphone and str(args.Uri).startswith(origin):
+                    args.State = CoreWebView2PermissionState.Allow
+
+            def hook():
+                core.PermissionRequested += on_permission
+
+            keep.append(on_permission)
+            form.Invoke(Func[Type](hook))  # must run on the window's own thread
+        except Exception as exc:
+            keep.clear()
+            jarvis.log.record("error", detail=f"could not pre-approve the microphone: {type(exc).__name__}: {exc}")
+
+    for name in ("before_load", "loaded"):  # as early as possible, then again as a fallback
+        event = getattr(window.events, name, None)
+        if event is not None:
+            event += attach
 
 
 def _notify(tray, title: str, text: str) -> None:

@@ -369,6 +369,14 @@ To have JARVIS start in the tray whenever you sign in to Windows:
 `autostart off` undoes it. This is what makes an 8am briefing practical:
 JARVIS is already running when the time comes.
 
+**The microphone question.** The first time the window uses the microphone,
+Windows' browser engine may ask "wants to use your microphones". Click
+Allow once; JARVIS keeps the same address between runs and stores the
+window's settings in `~/.jarvis/webview`, so it is remembered. JARVIS also
+tries to answer that question itself so it never appears. If you are asked
+on every start, another program is probably using port 47821, which forces
+JARVIS onto a different address each time.
+
 While JARVIS sits in the tray the microphone stays open for the wake word,
 exactly as it does with the window showing. Turn the wake word off in
 **CONTROL > Settings** if you would rather it did not.
