@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.8.0 — Gmail, Calendar and Spotify (2026-11-12)
+
+Added
+- Direct connections to Gmail, Google Calendar and Spotify, replacing
+  slow click-by-click control of their websites and apps.
+- `python -m jarvis connect|disconnect|connections`. Sign-in uses each
+  provider's standard browser approval; tokens go in the OS keychain.
+- Gmail: `gmail_search`, `gmail_read`, `gmail_send`, `gmail_draft`.
+  Sending always shows the complete message and waits for approval.
+- Calendar: `calendar_events`, `calendar_create`, `calendar_delete`.
+  Inviting guests asks first, since it emails them.
+- Spotify: `spotify_play`, `spotify_queue`, `spotify_control`,
+  `spotify_now_playing`.
+- Reading email or calendar content counts as untrusted, like a web page.
+
+Not yet verified
+- No Google or Spotify account was available on the build machine. These
+  tools are tested against stand-ins that follow each service's published
+  interface; their first real run is yours.
+
 ## 0.7.0 — Memory (2026-11-12)
 
 Added

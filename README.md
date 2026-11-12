@@ -93,6 +93,84 @@ setx ANTHROPIC_API_KEY "your-key-here"
 Open a new terminal so the key is picked up. This uses `claude-fable-5-2`
 and is billed per use by Anthropic.
 
+## Connecting your accounts
+
+Gmail, Google Calendar and Spotify are reached through each service's own
+interface, which is much faster and more dependable than clicking through a
+browser. Each needs a one-time setup, because Google and Spotify require
+every app, even a personal one, to be registered with them.
+
+Sign-in tokens are stored in Windows Credential Manager (entries named
+JARVIS), never in a file. Your passwords never reach JARVIS.
+
+| Command | What it does |
+|---|---|
+| `python -m jarvis connections` | Shows what is connected |
+| `python -m jarvis connect google` | Signs in to Gmail and Calendar |
+| `python -m jarvis connect spotify` | Signs in to Spotify |
+| `python -m jarvis disconnect google` | Signs out and deletes the stored tokens |
+
+### Connecting Google (about 10 minutes, once)
+
+1. Go to <https://console.cloud.google.com> and sign in. Create a new
+   project called `JARVIS` (project menu at the top, then New Project).
+2. Open **APIs & Services > Library**. Search for **Gmail API** and click
+   Enable. Do the same for **Google Calendar API**.
+3. Open **APIs & Services > OAuth consent screen** (it may be titled
+   Google Auth Platform). Click Get started. App name `JARVIS`, your email
+   for support and contact, audience **External**. Finish.
+4. Under **Audience**, add your own Gmail address as a **Test user**.
+5. Under **Clients**, click Create client. Application type **Desktop
+   app**, any name. Create. Copy the **Client ID** and **Client secret**.
+6. In a terminal in the Jarvis folder:
+
+   ```powershell
+   .venv\Scripts\python -m jarvis connect google
+   ```
+
+   Paste the Client ID and secret when asked. Your browser opens. Google
+   will warn that it "hasn't verified this app"; that is expected, because
+   the app is your own. Choose Advanced, then "Go to JARVIS", and allow the
+   permissions listed.
+
+While the app is in Google's "Testing" state, Google ends the sign-in after
+seven days and you will need to run `connect google` again. To avoid that,
+go to **Audience** and click **Publish app**. It stays private to you; the
+warning screen simply remains.
+
+What JARVIS can then do: search and read mail, send (always after showing
+you the complete message), save drafts, list calendar events, add events,
+delete events (asks first), and invite guests (asks first, since that
+emails them).
+
+With a hosted model, the content of any email or event JARVIS reads is sent
+to that model's provider.
+
+### Connecting Spotify (about 5 minutes, once)
+
+Needs Spotify Premium (Student is a Premium plan). The account that
+creates the app must be the one you listen with.
+
+1. Go to <https://developer.spotify.com/dashboard>, sign in, and click
+   Create app.
+2. Name and description: anything. **Redirect URI**: exactly
+   `http://127.0.0.1:8899/callback`. Tick **Web API**. Save.
+3. Open the app's Settings and copy the **Client ID**.
+4. In a terminal in the Jarvis folder:
+
+   ```powershell
+   .venv\Scripts\python -m jarvis connect spotify
+   ```
+
+   Paste the Client ID and approve in the browser.
+
+If Spotify answers "403", open the app's **User Management** page on the
+dashboard and add your own Spotify email address there.
+
+Spotify must be open on some device for there to be something to control;
+JARVIS can open the app for you first. The sign-in lasts six months, after
+which `connect spotify` is needed again.
+
 ## Memory
 
 JARVIS remembers across conversations. Tell it things ("my sister is called
@@ -192,6 +270,10 @@ Inside a chat, type `/help` for commands: `/tools`, `/log`, `/stop`,
 | Web | search the web, read a page's text, open a page in your browser |
 | Screen | list open windows, read what is in a window, open apps |
 | Mouse and keyboard | click, type, press key combinations |
+| Memory | remember, recall, forget |
+| Gmail | search, read, send, draft |
+| Google Calendar | list, add and delete events |
+| Spotify | play, queue, pause, skip, volume, what's playing |
 
 **How it "sees" the screen.** The current model reads text only, so JARVIS
 does not look at screenshots. It asks Windows what each window contains
@@ -281,6 +363,7 @@ jarvis/
   core/
     agent.py         the agent loop
     brains.py        the model backends: Anthropic, Ollama, OpenAI-compatible
+    secrets.py       the OS keychain (Windows Credential Manager)
     permissions.py   the permission gate
     tools.py         tool definitions and the plugin loader
     persona.py       the system prompt (personality and rules)
@@ -290,7 +373,9 @@ jarvis/
     config.py        reads settings.toml
   memory/store.py    long-term memory (SQLite and local embeddings)
   voice/engine.py    speech-to-text and text-to-speech
-  tools/             one file per group of tools: files, shell, code, web, desktop
+  integrations/      sign-in (OAuth) for Google and Spotify
+  tools/             one file per group of tools: files, shell, code, web,
+                     desktop, memory, google, spotify
   ui/
     terminal.py      terminal chat
     server.py        local server behind the window

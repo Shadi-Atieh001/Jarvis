@@ -18,6 +18,9 @@ def test_plugin_loader_finds_all_tools(registry):
         "move_file", "delete_file", "run_command", "run_python",
         "web_search", "read_page", "open_url",
         "remember", "recall", "forget",
+        "gmail_search", "gmail_read", "gmail_send", "gmail_draft",
+        "calendar_events", "calendar_create", "calendar_delete",
+        "spotify_play", "spotify_queue", "spotify_control", "spotify_now_playing",
         "list_windows", "read_screen", "open_app", "focus_window", "click", "type_text", "press_keys",
     }
     assert all(t.kind for t in registry.tools.values())  # every built-in tool says what it does

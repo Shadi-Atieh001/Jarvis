@@ -7,6 +7,9 @@
   resume   clear the emergency stop
   log [n]  show the last n actions
   setup    download and test the memory and speech models (run once)
+  connect google|spotify      sign in to an online account
+  disconnect google|spotify   sign out and delete the stored tokens
+  connections                 show which accounts are connected
 """
 
 from __future__ import annotations
@@ -40,6 +43,11 @@ def main(argv: list[str] | None = None) -> int:
             n = int(argv[1]) if len(argv) > 1 and argv[1].isdigit() else 20
             print(format_entries(log.tail(n)))
         return 0
+
+    if command in ("connect", "disconnect", "connections"):
+        from jarvis.integrations.cli import run
+
+        return run(command, argv[1:])
 
     if command in ("setup", "voice-setup"):
         settings = load_settings()

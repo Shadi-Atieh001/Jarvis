@@ -1,6 +1,6 @@
 [project]
 name = "jarvis"
-version = "0.7.0"
+version = "0.8.0"
 description = "A personal AI assistant that runs on your own machine."
 requires-python = ">=3.13"
 dependencies = [
@@ -9,6 +9,7 @@ dependencies = [
     "fastapi>=0.110",
     "uvicorn[standard]>=0.29",
     "ddgs>=9.0",
+    "keyring>=24.0",
 ]
 
 [project.optional-dependencies]
