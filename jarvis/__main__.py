@@ -10,6 +10,7 @@
   connect google|spotify      sign in to an online account
   disconnect google|spotify   sign out and delete the stored tokens
   connections                 show which accounts are connected
+  install-shortcut            add JARVIS to the desktop and Start menu
 """
 
 from __future__ import annotations
@@ -44,6 +45,11 @@ def main(argv: list[str] | None = None) -> int:
             print(format_entries(log.tail(n)))
         return 0
 
+    if command == "install-shortcut":
+        from jarvis.ui.shortcut import install
+
+        return install()
+
     if command in ("connect", "disconnect", "connections"):
         from jarvis.integrations.cli import run
 
@@ -70,9 +76,17 @@ def main(argv: list[str] | None = None) -> int:
         print(__doc__)
         return 0 if command in ("help", "-h", "--help") else 2
 
+    windowless = sys.stdout is None  # started from the shortcut: there is no terminal
+    if windowless:
+        # Nothing can be printed, so keep a log file instead.
+        log_file = open(load_settings().home / "jarvis.log", "a", encoding="utf-8", buffering=1)
+        sys.stdout = sys.stderr = log_file
+
     problem = startup_problem()
     if problem:
         print(problem)
+        if windowless:
+            _message_box(problem)
         return 1
 
     jarvis = build()
@@ -89,6 +103,14 @@ def main(argv: list[str] | None = None) -> int:
 
         run_window(jarvis)
     return 0
+
+
+def _message_box(text: str) -> None:
+    """Show a problem when there is no terminal to print it in."""
+    if sys.platform == "win32":
+        import ctypes
+
+        ctypes.windll.user32.MessageBoxW(None, text, "JARVIS", 0x30)  # 0x30: warning icon
 
 
 if __name__ == "__main__":

@@ -13,14 +13,20 @@ import re
 import shutil
 from pathlib import Path, PurePosixPath
 
+from jarvis.core.config import find_settings_file
 from jarvis.core.tools import AUTO, CONFIRM, ToolContext, ToolResult, tool
 
+SETTINGS_FILE = (find_settings_file() or Path("settings.toml")).resolve()
 MAX_READ_BYTES = 400_000
 MAX_SEARCH_RESULTS = 200
 SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", "$RECYCLE.BIN"}
 
 
 def _is_sensitive(path: Path, ctx: ToolContext) -> bool:
+    # JARVIS's own settings decide what it may do, so it must not be able
+    # to rewrite them without the user seeing.
+    if path in (ctx.settings.home / "overrides.json", SETTINGS_FILE):
+        return True
     posix = path.as_posix()
     for pattern in ctx.settings.sensitive_paths:
         # Match both the whole path and, for "**/x/**" patterns, the folder itself.
@@ -70,6 +76,8 @@ def read_file(args: dict, ctx: ToolContext) -> ToolResult:
     path = ctx.resolve(args["path"])
     if not path.is_file():
         return ToolResult(f"No such file: {path}", is_error=True)
+    if path.suffix.lower() in (".pdf", ".docx", ".pptx", ".xlsx"):
+        return ToolResult(f"{path.name} is a document. Use read_document to read it.", is_error=True)
     if path.stat().st_size > MAX_READ_BYTES and "limit" not in args:
         return ToolResult(
             f"{path} is {path.stat().st_size:,} bytes. Read it in parts with offset and limit, or use search_files.",

@@ -226,6 +226,17 @@ sentence and listens to itself to confirm both directions work.
 - Settings are under `[voice]` in `settings.toml`: recognition model,
   voice, and when to answer aloud (`when_spoken`, `always`, `never`).
 
+### Follow-up listening
+
+After JARVIS answers a spoken request, it listens for about six seconds so
+you can reply without saying "Hey Jarvis" again. Say nothing and it goes
+back to standing by. Turn it off in the control panel, or with
+`follow_up = false` under `[voice]`.
+
+If it ever picks up its own voice or background noise as a reply, turn this
+off and tell whoever maintains the code; the pause before it starts
+listening is `400` milliseconds in `maybeFollowUp` in `index.html`.
+
 ### "Hey Jarvis"
 
 With the window open, say "Hey Jarvis" followed by your request, in one
@@ -245,6 +256,43 @@ on and off, and the window remembers your choice.
 - It works only while the JARVIS window is open. Waking from the system
   tray comes with the scheduling phase.
 
+## Starting JARVIS without a terminal
+
+Run this once, in a terminal in the Jarvis folder:
+
+```powershell
+.venv\Scripts\python -m jarvis install-shortcut
+```
+
+It adds a JARVIS icon to your desktop and Start menu. From then on,
+double-click it, or press the Windows key and type "Jarvis". You can pin it
+to the taskbar by right-clicking the icon.
+
+Started this way there is no terminal window. If JARVIS cannot start (for
+example the key is missing), a message box says why, and anything it would
+have printed is kept in `~/.jarvis/jarvis.log`.
+
+If you ever move the Jarvis folder, run the command again.
+
+## The control panel
+
+Click **CONTROL** at the top right of the window:
+
+- **Memory**: everything JARVIS remembers, with a Forget button on each
+  item and one to forget everything.
+- **Activity**: the action log, newest first.
+- **Accounts**: which accounts are connected, with a Disconnect button.
+  Connecting still happens in a terminal, because it needs you to paste a
+  Client ID.
+- **Settings**: the permission mode, when to answer aloud, follow-up
+  listening and the wake word. Changes apply immediately.
+
+Choices made in the panel are saved to `~/.jarvis/overrides.json` and take
+priority over `settings.toml`, which is never rewritten. Delete that file
+to return to what `settings.toml` says. JARVIS itself needs your approval
+to write to either file, so it cannot quietly loosen its own permissions
+through its file tools.
+
 ## Running
 
 | Command | What it does |
@@ -256,6 +304,7 @@ on and off, and the window remembers your choice.
 | `python -m jarvis resume` | Clears the emergency stop |
 | `python -m jarvis log 50` | Shows the last 50 actions |
 | `python -m jarvis setup` | Downloads and tests the memory and speech models |
+| `python -m jarvis install-shortcut` | Adds JARVIS to the desktop and Start menu |
 | `python -m pytest` | Runs the tests |
 
 Inside a chat, type `/help` for commands: `/tools`, `/log`, `/stop`,
@@ -266,6 +315,7 @@ Inside a chat, type `/help` for commands: `/tools`, `/log`, `/stop`,
 | Area | Tools |
 |---|---|
 | Files | read, list, search, write, move, delete |
+| Documents | read PDF, Word, PowerPoint and Excel files |
 | Commands and code | run PowerShell commands; write and run Python in the workspace |
 | Web | search the web, read a page's text, open a page in your browser |
 | Screen | list open windows, read what is in a window, open apps |
@@ -281,6 +331,13 @@ does not look at screenshots. It asks Windows what each window contains
 screen reader does. That works well for ordinary apps and browsers. Apps
 that draw their own interface, such as games, video and images, expose
 little or nothing.
+
+**Documents.** `read_document` extracts the text of `.pdf`, `.docx`,
+`.pptx` (including speaker notes) and `.xlsx` files, so you can ask for a
+summary of a lecture, a quiz on a chapter, or the deadlines in a syllabus.
+Long documents are read in parts. Two limits: a scanned PDF is pictures of
+pages and has no text to read, and the old `.doc`, `.ppt` and `.xls`
+formats are not supported (save them as the modern format first).
 
 **Web search** uses free public search engines through the `ddgs` library,
 with no account or key. They sometimes rate-limit; if a search fails, wait a
@@ -375,11 +432,12 @@ jarvis/
   voice/engine.py    speech-to-text and text-to-speech
   integrations/      sign-in (OAuth) for Google and Spotify
   tools/             one file per group of tools: files, shell, code, web,
-                     desktop, memory, google, spotify
+                     documents, desktop, memory, google, spotify
   ui/
     terminal.py      terminal chat
     server.py        local server behind the window
     desktop.py       the window itself
+    shortcut.py      the desktop and Start menu shortcut
     web/index.html   the interface
 tests/
 ```

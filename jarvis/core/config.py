@@ -37,6 +37,7 @@ class Settings:
     whisper_model: str = "base.en"
     piper_voice: str = "en_GB-alan-medium"
     speak_replies: str = "when_spoken"  # when_spoken | always | never
+    follow_up: bool = True
     wake_word: bool = True
     wake_threshold: float = 0.5
 
@@ -98,6 +99,7 @@ def load_settings(path: Path | None = None) -> Settings:
     s.whisper_model = voice.get("whisper_model", s.whisper_model)
     s.piper_voice = voice.get("piper_voice", s.piper_voice)
     s.speak_replies = voice.get("speak_replies", s.speak_replies)
+    s.follow_up = voice.get("follow_up", s.follow_up)
     s.wake_word = voice.get("wake_word", s.wake_word)
     s.wake_threshold = voice.get("wake_threshold", s.wake_threshold)
 
@@ -118,7 +120,53 @@ def load_settings(path: Path | None = None) -> Settings:
 
     s.home.mkdir(parents=True, exist_ok=True)
     s.workspace.mkdir(parents=True, exist_ok=True)
+    apply_overrides(s)
     return s
+
+
+# Settings that can be changed from the control panel in the window. They
+# are saved to <home>/overrides.json and take priority over settings.toml,
+# which is never rewritten (so your comments and layout there are safe).
+ADJUSTABLE = {
+    "permission_mode": ("careful", "trusted", "unrestricted"),
+    "speak_replies": ("when_spoken", "always", "never"),
+    "wake_word": (True, False),
+    "follow_up": (True, False),
+}
+
+
+def overrides_path(s: Settings) -> Path:
+    return s.home / "overrides.json"
+
+
+def apply_overrides(s: Settings) -> None:
+    import json
+
+    try:
+        saved = json.loads(overrides_path(s).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    for key, value in saved.items() if isinstance(saved, dict) else []:
+        if key in ADJUSTABLE and value in ADJUSTABLE[key]:
+            setattr(s, key, value)
+
+
+def save_override(s: Settings, key: str, value) -> None:
+    """Change one adjustable setting now and remember it for next time."""
+    import json
+
+    if key not in ADJUSTABLE or value not in ADJUSTABLE[key]:
+        raise ValueError(f"{key} cannot be set to {value!r}.")
+    path = overrides_path(s)
+    try:
+        saved = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(saved, dict):
+            saved = {}
+    except (OSError, ValueError):
+        saved = {}
+    saved[key] = value
+    path.write_text(json.dumps(saved, indent=2), encoding="utf-8")
+    setattr(s, key, value)
 
 
 def _expand(p: str | Path) -> Path:

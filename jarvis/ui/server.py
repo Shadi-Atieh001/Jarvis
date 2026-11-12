@@ -123,7 +123,87 @@ def create_app(jarvis: Jarvis, token: str | None = None) -> FastAPI:
             "voice": voice.status(),
             "speak_replies": s.speak_replies,
             "wake_word": s.wake_word,
+            "follow_up": s.follow_up,
+            "permission_mode": s.permission_mode,
         }
+
+    # ---- control panel: memory, activity, accounts, settings
+
+    @app.get("/api/memories")
+    def memories(request: Request) -> dict:
+        authorise(request)
+        if jarvis.memory is None:
+            return {"enabled": False, "memories": [], "exchanges": 0}
+        facts, exchanges = jarvis.memory.counts()
+        return {"enabled": True, "memories": jarvis.memory.all(), "exchanges": exchanges}
+
+    @app.delete("/api/memories/{memory_id}")
+    def forget_memory(memory_id: int, request: Request) -> dict:
+        authorise(request)
+        if jarvis.memory is None or not jarvis.memory.forget(memory_id):
+            raise HTTPException(status_code=404)
+        jarvis.log.record("memory", detail=f"memory #{memory_id} deleted from the control panel")
+        return {"ok": True}
+
+    @app.delete("/api/memories")
+    def forget_all(request: Request) -> dict:
+        authorise(request)
+        if jarvis.memory is None:
+            raise HTTPException(status_code=404)
+        count = jarvis.memory.forget_everything()
+        jarvis.log.record("memory", detail=f"all memory deleted from the control panel ({count} memories)")
+        return {"ok": True}
+
+    @app.get("/api/log")
+    def activity(request: Request, n: int = 100) -> dict:
+        authorise(request)
+        return {"entries": jarvis.log.tail(max(1, min(n, 500)))}
+
+    @app.get("/api/connections")
+    def connections(request: Request) -> dict:
+        authorise(request)
+        from jarvis.integrations import oauth
+
+        result = []
+        for provider in oauth.PROVIDERS.values():
+            try:
+                connected = oauth.is_connected(provider)
+            except Exception:
+                connected = False
+            result.append({"key": provider.key, "label": provider.label, "connected": connected})
+        return {"connections": result}
+
+    @app.post("/api/connections/{key}/disconnect")
+    def disconnect(key: str, request: Request) -> dict:
+        authorise(request)
+        from jarvis.integrations import oauth
+
+        provider = oauth.PROVIDERS.get(key)
+        if provider is None:
+            raise HTTPException(status_code=404)
+        oauth.disconnect(provider)
+        jarvis.log.record("connection", detail=f"{provider.label} disconnected from the control panel")
+        return {"ok": True}
+
+    @app.get("/api/settings")
+    def get_settings(request: Request) -> dict:
+        authorise(request)
+        from jarvis.core.config import ADJUSTABLE
+
+        return {key: getattr(jarvis.settings, key) for key in ADJUSTABLE}
+
+    @app.post("/api/settings")
+    async def change_setting(request: Request) -> dict:
+        authorise(request)
+        from jarvis.core.config import save_override
+
+        data = await request.json()
+        try:
+            save_override(jarvis.settings, str(data.get("key")), data.get("value"))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+        jarvis.log.record("setting", detail=f"{data.get('key')} set to {data.get('value')!r} from the control panel")
+        return {"ok": True}
 
     @app.post("/api/transcribe")
     async def transcribe(request: Request) -> dict:

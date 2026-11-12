@@ -17,7 +17,7 @@ def test_plugin_loader_finds_all_tools(registry):
         "read_file", "list_dir", "search_files", "write_file", "make_dir",
         "move_file", "delete_file", "run_command", "run_python",
         "web_search", "read_page", "open_url",
-        "remember", "recall", "forget",
+        "remember", "recall", "forget", "read_document",
         "gmail_search", "gmail_read", "gmail_send", "gmail_draft",
         "calendar_events", "calendar_create", "calendar_delete",
         "spotify_play", "spotify_queue", "spotify_control", "spotify_now_playing",

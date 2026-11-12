@@ -69,6 +69,9 @@ piper_voice = "en_GB-alan-medium"
 # When JARVIS answers aloud: "when_spoken" (only if you spoke),
 # "always", or "never".
 speak_replies = "when_spoken"
+# After JARVIS answers a spoken request, keep listening for a few seconds so
+# you can reply without saying "Hey Jarvis" again.
+follow_up = true
 # Listen for "Hey Jarvis" while the window is open. The microphone stays on,
 # but audio is checked on this computer and discarded; nothing is recorded
 # until the phrase is heard. The ear button in the window turns it off.

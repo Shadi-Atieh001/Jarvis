@@ -147,6 +147,49 @@
   }
   #send:disabled { background: var(--accent-dim); color: #0a2530; cursor: default; }
 
+  .ghost {
+    font: 700 12px/1 var(--mono); letter-spacing: .2em; padding: 10px 14px;
+    color: var(--accent); border: 1px solid var(--line-strong); border-radius: 2px;
+  }
+  .ghost:hover { background: rgba(79, 216, 255, .14); }
+  #scrim { position: fixed; inset: 0; background: rgba(0, 4, 8, .55); z-index: 9; }
+  #panel {
+    position: fixed; top: 0; right: 0; bottom: 0; width: min(520px, 100vw); z-index: 10;
+    display: flex; flex-direction: column; background: #060c13; border-left: 1px solid var(--line-strong);
+    box-shadow: -18px 0 60px rgba(0, 0, 0, .6);
+  }
+  #panel[hidden], #scrim[hidden] { display: none; }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+  .tabs { display: flex; border-bottom: 1px solid var(--line); }
+  .tabs button {
+    flex: 1; padding: 12px 4px; font: 600 11px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase;
+    color: var(--muted); border: 0; border-bottom: 2px solid transparent;
+  }
+  .tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+  #panel-body { flex: 1; overflow-y: auto; padding: 16px 18px 24px; scrollbar-width: thin; scrollbar-color: var(--accent-dim) transparent; }
+  #panel-body p { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
+  .row { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid rgba(79, 216, 255, .10); }
+  .row .grow { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .row small { display: block; color: var(--muted); font: 11px/1.5 var(--mono); margin-top: 2px; }
+  .tag { font: 600 10px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); border: 1px solid var(--line); padding: 3px 6px; border-radius: 2px; white-space: nowrap; }
+  .tag.good { color: var(--ok); border-color: rgba(93, 255, 176, .4); }
+  .tag.bad { color: var(--danger); border-color: rgba(255, 82, 102, .4); }
+  .tag.warn { color: var(--warn); border-color: rgba(255, 179, 71, .4); }
+  .small-btn { font: 600 11px/1 var(--mono); letter-spacing: .1em; padding: 7px 10px; border: 1px solid var(--line-strong); border-radius: 2px; color: var(--text); white-space: nowrap; }
+  .small-btn:hover { background: rgba(79, 216, 255, .14); }
+  .small-btn.danger { border-color: var(--danger); color: var(--danger); }
+  .small-btn.danger:hover { background: var(--danger); color: #1a0308; }
+  .panel-actions { display: flex; gap: 10px; justify-content: space-between; align-items: center; margin: 4px 0 12px; }
+  .choice { display: block; width: 100%; text-align: left; padding: 12px 14px; margin-bottom: 8px; border: 1px solid var(--line); border-radius: 2px; }
+  .choice:hover { border-color: var(--line-strong); }
+  .choice[aria-pressed="true"] { border-color: var(--accent); background: rgba(79, 216, 255, .08); box-shadow: 0 0 16px rgba(79, 216, 255, .12) inset; }
+  .choice b { display: block; font: 600 12px/1.2 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--text); margin-bottom: 4px; }
+  .choice span { color: var(--muted); font-size: 13px; }
+  .setting-title { margin: 18px 0 8px; }
+  .log-line { font: 12px/1.5 var(--mono); padding: 6px 0; border-bottom: 1px solid rgba(79, 216, 255, .08); overflow-wrap: anywhere; color: var(--muted); }
+  .log-line b { color: var(--text); font-weight: 500; }
+  code.cmd { display: block; font: 12px var(--mono); background: rgba(2, 6, 10, .85); border: 1px solid var(--line); padding: 8px 10px; margin-top: 6px; color: var(--text); user-select: all; }
+
   @media (max-width: 820px) {
     main { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
     .hud { flex-direction: row; justify-content: flex-start; border-right: 0; border-bottom: 1px solid var(--line); padding: 10px 16px; gap: 14px; }
@@ -166,6 +209,7 @@
     <div class="readout"><span class="label">Voice</span><b id="r-voice">—</b></div>
     <div class="readout"><span class="label">Local time</span><b id="r-time">—</b></div>
   </div>
+  <button id="panel-open" class="ghost" title="Memory, activity, accounts and settings" aria-haspopup="dialog">CONTROL</button>
   <button id="stop" title="Emergency stop: halt everything now">STOP</button>
 </header>
 
@@ -200,6 +244,21 @@
     </form>
   </section>
 </main>
+
+<div id="scrim" hidden></div>
+<aside id="panel" role="dialog" aria-label="Control panel" hidden>
+  <div class="panel-head">
+    <span class="label">Control panel</span>
+    <button id="panel-close" class="ghost" aria-label="Close the control panel">CLOSE</button>
+  </div>
+  <div class="tabs" role="tablist">
+    <button role="tab" data-tab="memory">Memory</button>
+    <button role="tab" data-tab="activity">Activity</button>
+    <button role="tab" data-tab="accounts">Accounts</button>
+    <button role="tab" data-tab="settings">Settings</button>
+  </div>
+  <div id="panel-body" role="tabpanel"></div>
+</aside>
 
 <script>
 "use strict";
@@ -309,8 +368,21 @@ function handle(m) {
     current = null; busy = false; awaitingApproval = 0;
     speech.flush();
     if (m.status === "stopped") { halted = true; speech.stop(); }
+    if (m.status !== "done") followUpDue = false;
     refreshMode();
+    maybeFollowUp();
   }
+}
+
+// In a spoken conversation, listen again once JARVIS has finished answering,
+// so you can reply without the wake word. Silence ends the conversation.
+let followUpDue = false;
+function maybeFollowUp() {
+  if (!followUpDue || busy || halted || awaitingApproval || speech.playing || recorder.active || recorder.transcribing) return;
+  if (!ws || ws.readyState !== 1) return;
+  followUpDue = false;
+  // A short pause lets the last of JARVIS's own voice die away first.
+  setTimeout(() => { if (!busy && !speech.playing && !halted) recorder.start(null, false, true); }, 400);
 }
 
 function showConfirm(m) {
@@ -350,6 +422,7 @@ function submit(text, spoken) {
     current = null; busy = true;
     speech.stop();
     speakThisTurn = !muted && info.speak_replies !== "never" && (spoken || info.speak_replies === "always");
+    followUpDue = !!spoken && !!info.follow_up && info.voice.listen;
     refreshMode();
   }
   return true;
@@ -364,6 +437,7 @@ input.addEventListener("keydown", (e) => {
 });
 input.addEventListener("input", () => { input.style.height = "auto"; input.style.height = input.scrollHeight + "px"; });
 $("stop").onclick = () => {
+  followUpDue = false;
   speech.stop(); recorder.cancel();
   if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: "stop" }));
 };
@@ -429,7 +503,11 @@ const speech = {
   },
   async next(generation) {
     const item = this.queue.shift();
-    if (!item || generation !== this.generation) { this.playing = false; level = 0; refreshMode(); return; }
+    if (!item || generation !== this.generation) {
+      this.playing = false; level = 0; refreshMode();
+      if (!item) maybeFollowUp();  // finished speaking: listen for a reply
+      return;
+    }
     this.playing = true; refreshMode();
     const wav = await item.wav;
     if (generation !== this.generation) return;
@@ -513,15 +591,17 @@ const mic = {
 const recorder = {
   active: false, transcribing: false, chunks: [], timer: null, viaWake: false,
   hear(chunk) { if (this.active) this.chunks.push(chunk); },
-  async start(preroll, viaWake) {
+  async start(preroll, viaWake, followUp) {
     if (this.active || this.transcribing) return;
     speech.stop();  // talking over JARVIS interrupts it
     if (!(await mic.open())) return;
     this.chunks = preroll ? preroll.slice() : [];
     this.viaWake = !!viaWake; this.active = true;
     micBtn.classList.add("live");
-    caption(viaWake ? `Yes, ${ADDRESS}?` : "Listening… click the microphone when you have finished.");
+    caption(viaWake ? `Yes, ${ADDRESS}?` : followUp ? "Listening for your reply…" : "Listening… click the microphone when you have finished.");
     refreshMode();
+    // After an answer, wait only briefly for a reply, and give up quietly.
+    const patience = followUp ? 6000 : 8000;
 
     const began = performance.now();
     let heardSpeech = false, quietSince = null;
@@ -532,7 +612,7 @@ const recorder = {
       else if (quietSince === null) quietSince = now;
       const quiet = quietSince === null ? 0 : now - quietSince;
       if (heardSpeech && quiet > 1400) this.finish();           // you stopped talking
-      else if (!heardSpeech && now - began > 8000) { this.cancel(); caption("I didn't hear anything."); }
+      else if (!heardSpeech && now - began > patience) { this.cancel(); caption(followUp ? "" : "I didn't hear anything."); }
       else if (now - began > 60000) this.finish();              // one minute at most
     }, 60);
   },
@@ -658,6 +738,148 @@ muteBtn.onclick = () => {
   $("mute-waves").style.display = muted ? "none" : "";
   if (muted) speech.stop();
 };
+
+/* ---------------------------------------------------- control panel */
+const panel = {
+  tab: "memory",
+  open() { $("panel").hidden = false; $("scrim").hidden = false; this.show(this.tab); $("panel-close").focus(); },
+  close() { $("panel").hidden = true; $("scrim").hidden = true; $("panel-open").focus(); },
+  async show(tab) {
+    this.tab = tab;
+    document.querySelectorAll("#panel .tabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === tab)));
+    const body = $("panel-body");
+    body.replaceChildren(el("p", "", "Loading…"));
+    try { body.replaceChildren(...(await this[tab]())); }
+    catch (err) { body.replaceChildren(el("p", "", "Could not load this: " + err.message)); }
+  },
+  async json(path, options) { return (await api(path, options)).json(); },
+
+  async memory() {
+    const data = await this.json("/api/memories");
+    if (!data.enabled) return [el("p", "", "Memory is switched off in settings.toml.")];
+    const out = [el("p", "", `${data.memories.length} saved memories and ${data.exchanges} past exchanges, all stored on this computer.`)];
+    if (data.memories.length || data.exchanges) {
+      const bar = el("div", "panel-actions");
+      bar.appendChild(el("span", "label", "What JARVIS knows"));
+      const wipe = el("button", "small-btn danger", "Forget everything");
+      wipe.onclick = async () => {
+        if (wipe.dataset.armed) { await api("/api/memories", { method: "DELETE" }); this.show("memory"); }
+        else { wipe.dataset.armed = "1"; wipe.textContent = "Click again to confirm"; }
+      };
+      bar.appendChild(wipe);
+      out.push(bar);
+    }
+    if (!data.memories.length) out.push(el("p", "", "Nothing saved yet. Tell JARVIS something about yourself and it will appear here."));
+    for (const m of data.memories) {
+      const row = el("div", "row"), text = el("div", "grow", m.text);
+      text.appendChild(el("small", "", `#${m.id} · saved ${m.created.slice(0, 10)}`));
+      const forget = el("button", "small-btn", "Forget");
+      forget.onclick = async () => { await api(`/api/memories/${m.id}`, { method: "DELETE" }); this.show("memory"); };
+      row.append(el("span", "tag", m.kind), text, forget);
+      out.push(row);
+    }
+    return out;
+  },
+
+  async activity() {
+    const data = await this.json("/api/log?n=150");
+    const bar = el("div", "panel-actions");
+    bar.appendChild(el("span", "label", "Most recent first"));
+    const refresh = el("button", "small-btn", "Refresh");
+    refresh.onclick = () => this.show("activity");
+    bar.appendChild(refresh);
+    const out = [el("p", "", "Everything JARVIS has done. Passwords and keys are removed before anything is written."), bar];
+    if (!data.entries.length) out.push(el("p", "", "Nothing yet."));
+    for (const e of data.entries.reverse()) {
+      const line = el("div", "log-line");
+      line.appendChild(document.createTextNode((e.time || "").slice(0, 19).replace("T", " ") + "  "));
+      if (e.event === "tool") {
+        const kind = { auto: "good", approved: "good", denied: "bad", blocked: "bad", error: "warn" }[e.decision] || "";
+        line.appendChild(el("span", "tag " + kind, e.decision || "?"));
+        line.appendChild(document.createTextNode(" "));
+        line.appendChild(el("b", "", e.tool));
+        let args = JSON.stringify(e.args || {});
+        if (args.length > 160) args = args.slice(0, 160) + "…";
+        line.appendChild(document.createTextNode(" " + args));
+      } else {
+        line.appendChild(el("b", "", e.event));
+        let detail = String(e.detail || e.text || "").replace(/\s+/g, " ");
+        if (detail.length > 200) detail = detail.slice(0, 200) + "…";
+        line.appendChild(document.createTextNode(" " + detail));
+      }
+      out.push(line);
+    }
+    return out;
+  },
+
+  async accounts() {
+    const data = await this.json("/api/connections");
+    const out = [el("p", "", "Sign-in tokens are kept in Windows Credential Manager, never in a file.")];
+    for (const c of data.connections) {
+      const row = el("div", "row"), text = el("div", "grow", c.label);
+      if (c.connected) {
+        const off = el("button", "small-btn danger", "Disconnect");
+        off.onclick = async () => {
+          if (off.dataset.armed) { await api(`/api/connections/${c.key}/disconnect`, { method: "POST" }); this.show("accounts"); }
+          else { off.dataset.armed = "1"; off.textContent = "Click again to confirm"; }
+        };
+        row.append(el("span", "tag good", "Connected"), text, off);
+      } else {
+        text.appendChild(el("small", "", "To connect, run this in a terminal in the Jarvis folder:"));
+        text.appendChild(el("code", "cmd", `.venv\\Scripts\\python -m jarvis connect ${c.key}`));
+        row.append(el("span", "tag", "Not connected"), text);
+      }
+      out.push(row);
+    }
+    return out;
+  },
+
+  async settings() {
+    const current = await this.json("/api/settings");
+    const out = [];
+    const group = (title, key, options) => {
+      out.push(el("div", "label setting-title", title));
+      for (const [value, name, description] of options) {
+        const button = el("button", "choice");
+        button.setAttribute("aria-pressed", String(current[key] === value));
+        button.append(el("b", "", name), el("span", "", description));
+        button.onclick = async () => {
+          await api("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key, value }) });
+          info[key] = value;
+          if (key === "wake_word") { try { localStorage.removeItem("jarvis.wake"); } catch (_) {} value ? wake.enable() : wake.disable(); }
+          this.show("settings");
+        };
+        out.push(button);
+      }
+    };
+    group("How much JARVIS may do without asking", "permission_mode", [
+      ["careful", "Careful", "Asks before overwriting, deleting, running commands, or touching anything outside its workspace."],
+      ["trusted", "Trusted", "Asks only before deleting or sending, and before acting on something it has just read on the web or in an email."],
+      ["unrestricted", "Unrestricted", "Never asks. A web page or email with hidden instructions could make it act unseen."],
+    ]);
+    group("Answer aloud", "speak_replies", [
+      ["when_spoken", "When I speak", "Speaks only when you spoke to it. Typed messages stay silent."],
+      ["always", "Always", "Speaks every reply."],
+      ["never", "Never", "Text only."],
+    ]);
+    group("Keep listening after an answer", "follow_up", [
+      [true, "On", "After a spoken answer it listens for a few seconds, so you can reply without the wake word."],
+      [false, "Off", "Every request needs the wake word or the microphone button."],
+    ]);
+    group('Listen for "Hey Jarvis"', "wake_word", [
+      [true, "On", "The microphone stays open; audio is checked on this computer and discarded."],
+      [false, "Off", "The microphone is used only when you press the button."],
+    ]);
+    out.push(el("div", "label setting-title", "Everything else"));
+    out.push(el("p", "", "The model, the voice, the blocked list and other options are in settings.toml in the Jarvis folder. Choices made here are saved separately and take priority."));
+    return out;
+  },
+};
+$("panel-open").onclick = () => panel.open();
+$("panel-close").onclick = () => panel.close();
+$("scrim").onclick = () => panel.close();
+document.querySelectorAll("#panel .tabs button").forEach((b) => { b.onclick = () => panel.show(b.dataset.tab); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("panel").hidden) panel.close(); });
 
 /* -------------------------------------------------------------- orb */
 const orb = $("orb"), g = orb.getContext("2d");

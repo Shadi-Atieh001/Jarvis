@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.9.0 — Launcher, documents, follow-up listening, control panel (2026-11-12)
+
+Added
+- `python -m jarvis install-shortcut`: a JARVIS icon on the desktop and in
+  the Start menu, starting without a terminal window. Problems at startup
+  appear in a message box; output goes to `~/.jarvis/jarvis.log`.
+- `read_document`: reads PDF, Word, PowerPoint and Excel files.
+- Follow-up listening: after a spoken answer JARVIS listens for a few
+  seconds for your reply (`follow_up` under `[voice]`).
+- A control panel in the window (CONTROL button): memory, activity,
+  accounts and settings. Settings changes apply at once and are saved to
+  `~/.jarvis/overrides.json`.
+
+Changed
+- JARVIS's own settings files are now protected paths: its file tools need
+  approval to write to them.
+
+Not yet verified
+- The shortcut and the windowless start are Windows-only and untested here.
+- Follow-up listening was tested with a simulated microphone, not against
+  real room noise or speaker echo.
+
 ## 0.8.0 — Gmail, Calendar and Spotify (2026-11-12)
 
 Added
