@@ -77,7 +77,12 @@ class Voice:
             if speak and not all(f.exists() for f in self.voice_files):
                 speak = False
                 problems.append("The voice has not been downloaded. Run:  python -m jarvis voice-setup")
-        return {"listen": listen, "speak": speak, "problems": problems}
+        from jarvis.voice import wake
+
+        wake_ready = listen and self.settings.wake_word and wake.models_present()
+        if listen and self.settings.wake_word and not wake_ready:
+            problems.append('"Hey Jarvis" is not set up. Run:  pip install -e ".[voice]"  then  python -m jarvis voice-setup')
+        return {"listen": listen, "speak": speak, "wake": wake_ready, "problems": problems}
 
     # ----------------------------------------------------------- listening
 
@@ -220,5 +225,28 @@ def setup(settings: Settings, report=print) -> int:
     if "operational" not in heard.lower():
         report("That does not match what was said, so recognition may be unreliable.")
         return 1
+    if settings.wake_word:
+        from jarvis.voice import wake
+
+        if not wake.available():
+            report('The wake word needs one more library. Run:  pip install -e ".[voice]"  and repeat this command.')
+            return 1
+        try:
+            wake.download_models(report)
+            listener = wake.WakeListener(settings)
+            import numpy as np
+
+            def detects(sentence: str) -> bool:
+                samples = (wav_to_samples(voice.speak(sentence)) * 32767).astype(np.int16)
+                padded = np.concatenate([np.zeros(16000, np.int16), samples, np.zeros(16000, np.int16)])
+                return listener.feed(padded.tobytes())
+
+            if not detects("Hey Jarvis."):
+                report('Wake-word self-test failed: "Hey Jarvis" was not recognised.')
+                return 1
+            report('Wake-word self-test: "Hey Jarvis" recognised.')
+        except Exception as exc:
+            report(f"Wake-word setup failed: {type(exc).__name__}: {exc}")
+            return 1
     report("Voice is ready. Start JARVIS and click the microphone.")
     return 0

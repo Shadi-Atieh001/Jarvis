@@ -121,7 +121,24 @@ listens to itself to confirm both directions work.
 - Settings are under `[voice]` in `settings.toml`: recognition model,
   voice, and when to answer aloud (`when_spoken`, `always`, `never`).
 
-The wake word ("Hey Jarvis") is not built yet; it comes next.
+### "Hey Jarvis"
+
+With the window open, say "Hey Jarvis" followed by your request, in one
+breath or after the chime. The ear button beside the microphone turns this
+on and off, and the window remembers your choice.
+
+- While it is on, the microphone stays open and Windows shows its
+  microphone indicator. The audio goes only to JARVIS's own server on your
+  computer, is checked for the phrase and discarded. Nothing is recorded or
+  transcribed until the phrase is heard, and none of it leaves the machine.
+- It does not listen while JARVIS is speaking, working, waiting for an
+  approval, or stopped, so it cannot wake itself.
+- Each wake is written to the action log.
+- If it wakes by mistake, raise `wake_threshold` under `[voice]` in
+  `settings.toml`; if it misses you, lower it. `wake_word = false` turns
+  the feature off entirely.
+- It works only while the JARVIS window is open. Waking from the system
+  tray comes with the scheduling phase.
 
 ## Running
 

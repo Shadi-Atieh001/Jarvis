@@ -122,6 +122,7 @@ def create_app(jarvis: Jarvis, token: str | None = None) -> FastAPI:
             "model": model,
             "voice": voice.status(),
             "speak_replies": s.speak_replies,
+            "wake_word": s.wake_word,
         }
 
     @app.post("/api/transcribe")
@@ -145,6 +146,35 @@ def create_app(jarvis: Jarvis, token: str | None = None) -> FastAPI:
         except VoiceUnavailable as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from None
         return Response(content=wav, media_type="audio/wav")
+
+    @app.websocket("/ws/wake")
+    async def wake_endpoint(ws: WebSocket) -> None:
+        """The window streams microphone audio here while it waits for
+        "Hey Jarvis". Audio is checked and dropped; only detections go back."""
+        origin = urlparse(ws.headers.get("origin", ""))
+        if ws.query_params.get("token") != token or origin.netloc != ws.headers.get("host", ""):
+            await ws.close(code=1008)
+            return
+        await ws.accept()
+        try:
+            from jarvis.voice.wake import WakeListener
+
+            listener = await run_in_threadpool(WakeListener, jarvis.settings)
+        except Exception as exc:
+            await ws.send_json({"type": "unavailable", "detail": str(exc)})
+            await ws.close()
+            return
+        await ws.send_json({"type": "ready"})
+        try:
+            while True:
+                pcm = await ws.receive_bytes()
+                if len(pcm) > 200_000:  # far more than one audio chunk
+                    continue
+                if await run_in_threadpool(listener.feed, pcm) and not jarvis.kill.tripped:
+                    jarvis.log.record("wake_word", detail="Hey Jarvis heard")
+                    await ws.send_json({"type": "wake"})
+        except WebSocketDisconnect:
+            pass
 
     @app.websocket("/ws")
     async def ws_endpoint(ws: WebSocket) -> None:

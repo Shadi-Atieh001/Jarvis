@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.5.0 — "Hey Jarvis" (2026-11-12)
+
+Added
+- Wake word: say "Hey Jarvis" and your request, with no click. Detection
+  runs locally (openWakeWord); audio is checked in memory and discarded.
+  Toggle with the ear button; configure under `[voice]` in `settings.toml`.
+- `python -m jarvis voice-setup` now also downloads and tests the wake-word
+  model.
+
+Changed
+- The window uses one shared microphone capture for the button and the wake
+  word.
+
 ## 0.4.0 — Voice and a new interface (2026-11-11)
 
 Added

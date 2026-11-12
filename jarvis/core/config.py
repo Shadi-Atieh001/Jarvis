@@ -36,6 +36,8 @@ class Settings:
     whisper_model: str = "base.en"
     piper_voice: str = "en_GB-alan-medium"
     speak_replies: str = "when_spoken"  # when_spoken | always | never
+    wake_word: bool = True
+    wake_threshold: float = 0.5
 
     compat_base_url: str = ""
     compat_model: str = ""
@@ -93,6 +95,8 @@ def load_settings(path: Path | None = None) -> Settings:
     s.whisper_model = voice.get("whisper_model", s.whisper_model)
     s.piper_voice = voice.get("piper_voice", s.piper_voice)
     s.speak_replies = voice.get("speak_replies", s.speak_replies)
+    s.wake_word = voice.get("wake_word", s.wake_word)
+    s.wake_threshold = voice.get("wake_threshold", s.wake_threshold)
 
     compat = data.get("openai_compatible", {})
     s.compat_base_url = compat.get("base_url", s.compat_base_url)

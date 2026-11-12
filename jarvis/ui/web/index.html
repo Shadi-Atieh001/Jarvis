@@ -73,6 +73,10 @@
   #mic.live svg { stroke: var(--ok); }
   #mic:disabled { opacity: .35; cursor: not-allowed; }
   #mute.off svg { stroke: var(--muted); }
+  #wake svg { stroke: var(--muted); }
+  #wake.on { border-color: var(--accent); box-shadow: 0 0 20px rgba(79, 216, 255, .4); }
+  #wake.on svg { stroke: var(--accent); }
+  #wake:disabled { opacity: .35; cursor: not-allowed; }
   .hint { font: 11px/1.4 var(--mono); color: var(--muted); text-align: center; }
 
   /* corner brackets */
@@ -175,6 +179,9 @@
         <button id="mic" class="round" title="Talk to JARVIS (Ctrl+Space)" aria-label="Talk to JARVIS" disabled>
           <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/></svg>
         </button>
+        <button id="wake" class="round small" title="Listen for &quot;Hey Jarvis&quot;" aria-label="Listen for Hey Jarvis" aria-pressed="false" disabled>
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2"/><path d="M8 8a5.7 5.7 0 0 0 0 8M16 8a5.7 5.7 0 0 1 0 8M5 5a10 10 0 0 0 0 14M19 5a10 10 0 0 1 0 14"/></svg>
+        </button>
       </div>
       <div class="hint" id="hint">Ctrl + Space to talk</div>
     </div>
@@ -197,7 +204,7 @@ const TOKEN = "__JARVIS_TOKEN__";
 const ADDRESS = "__ADDRESS__";
 const $ = (id) => document.getElementById(id);
 const log = $("log"), chat = $("chat"), input = $("input"), sendBtn = $("send");
-const stateEl = $("state"), captionEl = $("caption"), micBtn = $("mic"), muteBtn = $("mute");
+const stateEl = $("state"), captionEl = $("caption"), micBtn = $("mic"), muteBtn = $("mute"), wakeBtn = $("wake");
 
 let ws, busy = false, halted = false, current = null, currentText = "";
 let info = { voice: { listen: false, speak: false, problems: [] }, speak_replies: "when_spoken" };
@@ -442,32 +449,60 @@ const speech = {
   },
 };
 
-/* --- listening: record 16 kHz mono, stop on silence, send as a WAV */
-const recorder = {
-  active: false, transcribing: false, stream: null, node: null, chunks: [], timer: null,
-  async start() {
-    if (this.active || this.transcribing) return;
-    speech.stop();  // talking over JARVIS interrupts it
+/* --- microphone: one shared capture, used by the recorder and the wake word */
+const mic = {
+  stream: null, source: null, node: null, analyser: null, buf: null, opening: null,
+  async open() {
+    if (this.stream) return true;
+    if (!this.opening) this.opening = this.connect().finally(() => { this.opening = null; });
+    return this.opening;
+  },
+  async connect() {
     let stream;
     try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
-    catch (err) { caption("Microphone unavailable: " + (err.message || err.name)); return; }
+    catch (err) { caption("Microphone unavailable: " + (err.message || err.name)); return false; }
     const ctx = audio();
     const source = ctx.createMediaStreamSource(stream), analyser = ctx.createAnalyser();
     analyser.fftSize = 1024;
     // ScriptProcessor is the simplest way to collect raw samples.
     const node = ctx.createScriptProcessor(4096, 1, 1), silent = ctx.createGain();
     silent.gain.value = 0;
-    this.chunks = [];
-    node.onaudioprocess = (e) => { if (this.active) this.chunks.push(new Float32Array(e.inputBuffer.getChannelData(0))); };
+    node.onaudioprocess = (e) => {
+      const chunk = new Float32Array(e.inputBuffer.getChannelData(0));
+      recorder.hear(chunk); wake.hear(chunk);
+    };
     source.connect(analyser); source.connect(node); node.connect(silent); silent.connect(ctx.destination);
-    Object.assign(this, { active: true, stream, node, source });
-    micBtn.classList.add("live"); caption("Listening… click the microphone when you have finished.");
+    Object.assign(this, { stream, source, node, analyser, buf: new Float32Array(analyser.fftSize) });
+    return true;
+  },
+  loudness() { return this.analyser ? loudness(this.analyser, this.buf) : 0; },
+  close() {
+    // Stays open while the wake word is on; otherwise the mic light goes off.
+    if (wake.on || recorder.active || !this.stream) return;
+    this.node.disconnect(); this.node.onaudioprocess = null; this.source.disconnect();
+    this.stream.getTracks().forEach((t) => t.stop());
+    this.stream = this.source = this.node = this.analyser = null;
+  },
+};
+
+/* --- listening: collect speech, stop on silence, send it as a WAV */
+const recorder = {
+  active: false, transcribing: false, chunks: [], timer: null, viaWake: false,
+  hear(chunk) { if (this.active) this.chunks.push(chunk); },
+  async start(preroll, viaWake) {
+    if (this.active || this.transcribing) return;
+    speech.stop();  // talking over JARVIS interrupts it
+    if (!(await mic.open())) return;
+    this.chunks = preroll ? preroll.slice() : [];
+    this.viaWake = !!viaWake; this.active = true;
+    micBtn.classList.add("live");
+    caption(viaWake ? `Yes, ${ADDRESS}?` : "Listening… click the microphone when you have finished.");
     refreshMode();
 
-    const buf = new Float32Array(analyser.fftSize), began = performance.now();
+    const began = performance.now();
     let heardSpeech = false, quietSince = null;
     this.timer = setInterval(() => {
-      const loud = loudness(analyser, buf), now = performance.now();
+      const loud = mic.loudness(), now = performance.now();
       level = Math.min(1, loud * 9);
       if (loud > 0.02) { heardSpeech = true; quietSince = null; }
       else if (quietSince === null) quietSince = now;
@@ -479,23 +514,23 @@ const recorder = {
   },
   release() {
     clearInterval(this.timer);
-    if (this.node) { this.node.disconnect(); this.node.onaudioprocess = null; }
-    if (this.source) this.source.disconnect();
-    if (this.stream) this.stream.getTracks().forEach((t) => t.stop());  // turns the mic light off
-    this.active = false; this.stream = this.node = this.source = null; level = 0;
+    this.active = false; level = 0;
     micBtn.classList.remove("live");
+    mic.close();
   },
   cancel() { if (this.active) { this.release(); caption(""); refreshMode(); } },
   async finish() {
     if (!this.active) return;
-    const chunks = this.chunks;
+    const chunks = this.chunks, viaWake = this.viaWake;
     this.release();
     this.transcribing = true; caption("Transcribing…"); refreshMode();
     try {
       const response = await api("/api/transcribe", { method: "POST", headers: { "Content-Type": "audio/wav" }, body: toWav(chunks, 16000) });
-      const text = (await response.json()).text;
+      let text = (await response.json()).text;
+      // The recording may begin with the tail of the wake phrase itself.
+      if (viaWake) text = text.replace(/^\W*(?:(?:hey|hi|okay|ok)\W+)?jarvis\W*/i, "");
       this.transcribing = false;
-      if (!text) caption("I didn't catch that.");
+      if (!text.trim()) caption("I didn't catch that.");
       else if (!submit(text, true)) { input.value = text; caption("Still busy; your words are in the box."); }
       else caption("");
     } catch (err) {
@@ -505,6 +540,71 @@ const recorder = {
   },
   toggle() { this.active ? this.finish() : this.start(); },
 };
+
+/* --- wake word: stream the microphone to our own server until it hears "Hey Jarvis" */
+const wake = {
+  on: false, ready: false, socket: null, recent: [],
+  hear(chunk) {
+    this.recent.push(chunk);
+    if (this.recent.length > 4) this.recent.shift();
+    // Only listen for the phrase when JARVIS is idle, never over its own voice.
+    if (!this.on || !this.ready || recorder.active || recorder.transcribing || speech.playing || busy || halted || awaitingApproval) return;
+    const pcm = new Int16Array(chunk.length);
+    for (let i = 0; i < chunk.length; i++) pcm[i] = Math.max(-1, Math.min(1, chunk[i])) * 32767;
+    if (this.socket && this.socket.readyState === 1) this.socket.send(pcm.buffer);
+  },
+  async enable() {
+    if (this.on || !info.voice.wake) return;
+    this.on = true; this.paint();
+    if (!(await mic.open())) { this.on = false; this.paint(); return; }
+    if (audioCtx.state === "suspended") caption('Click anywhere to arm "Hey Jarvis".');
+    const socket = this.socket = new WebSocket(`ws://${location.host}/ws/wake?token=${encodeURIComponent(TOKEN)}`);
+    socket.onmessage = (event) => {
+      const m = JSON.parse(event.data);
+      if (m.type === "ready") this.ready = true;
+      else if (m.type === "wake") this.heard();
+      else if (m.type === "unavailable") { caption("Wake word unavailable: " + m.detail); this.disable(); }
+    };
+    socket.onclose = () => { if (this.socket === socket) this.ready = false; };
+  },
+  disable() {
+    this.on = false; this.ready = false;
+    if (this.socket) { this.socket.close(); this.socket = null; }
+    mic.close(); this.paint();
+  },
+  heard() {
+    if (recorder.active || recorder.transcribing || busy || halted) return;
+    chime();
+    // Start from a little before now, so words said straight after
+    // "Hey Jarvis" are not lost.
+    recorder.start(this.recent.slice(-3), true);
+  },
+  toggle() {
+    this.on ? this.disable() : this.enable();
+    try { localStorage.setItem("jarvis.wake", this.on ? "on" : "off"); } catch (_) {}
+  },
+  paint() {
+    wakeBtn.classList.toggle("on", this.on);
+    wakeBtn.setAttribute("aria-pressed", String(this.on));
+    $("hint").textContent = this.on ? 'Say "Hey Jarvis", or Ctrl + Space' : "Ctrl + Space to talk";
+  },
+};
+function chime() {
+  const ctx = audio(), now = ctx.currentTime;
+  [[660, 0], [990, 0.09]].forEach(([freq, at]) => {
+    const osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.0001, now + at);
+    gain.gain.exponentialRampToValueAtTime(0.12, now + at + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + at + 0.12);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(now + at); osc.stop(now + at + 0.14);
+  });
+}
+// Browsers keep audio paused until the first click or key press.
+["pointerdown", "keydown"].forEach((name) => addEventListener(name, () => {
+  if (audioCtx && audioCtx.state === "suspended") audioCtx.resume().then(() => { if (wake.on) caption(""); });
+}, true));
 
 function toWav(chunks, rate) {
   const length = chunks.reduce((n, c) => n + c.length, 0);
@@ -523,6 +623,7 @@ function toWav(chunks, rate) {
 }
 
 micBtn.onclick = () => recorder.toggle();
+wakeBtn.onclick = () => wake.toggle();
 document.addEventListener("keydown", (e) => {
   if (e.ctrlKey && e.code === "Space" && !micBtn.disabled) { e.preventDefault(); recorder.toggle(); }
 });
@@ -613,6 +714,12 @@ api("/api/info").then((r) => r.json()).then((data) => {
   const v = data.voice;
   $("r-voice").textContent = v.listen && v.speak ? "READY" : v.listen ? "LISTEN ONLY" : "NOT SET UP";
   micBtn.disabled = !v.listen;
+  wakeBtn.disabled = !v.wake;
+  if (!v.wake) wakeBtn.title = '"Hey Jarvis" is not set up';
+  let wanted = data.wake_word;
+  try { const saved = localStorage.getItem("jarvis.wake"); if (saved) wanted = saved === "on"; } catch (_) {}
+  if (v.wake && wanted) wake.enable();
+  if (v.listen && !v.wake && v.problems.length) add(el("div", "msg info", v.problems.join("\n")));
   if (!v.listen) {
     $("hint").textContent = "Voice is not set up";
     micBtn.title = "Voice is not set up";

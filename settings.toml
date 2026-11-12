@@ -63,6 +63,13 @@ piper_voice = "en_GB-alan-medium"
 # When JARVIS answers aloud: "when_spoken" (only if you spoke),
 # "always", or "never".
 speak_replies = "when_spoken"
+# Listen for "Hey Jarvis" while the window is open. The microphone stays on,
+# but audio is checked on this computer and discarded; nothing is recorded
+# until the phrase is heard. The ear button in the window turns it off.
+wake_word = true
+# How sure the detector must be, 0 to 1. Raise it if JARVIS wakes by
+# mistake; lower it if it misses you.
+wake_threshold = 0.5
 
 [paths]
 # Where JARVIS keeps its data (action log, stop flag, later: memory).

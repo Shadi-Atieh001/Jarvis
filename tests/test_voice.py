@@ -103,3 +103,75 @@ def test_unavailable_voice_is_reported(make_jarvis, monkeypatch):
     c = TestClient(server.create_app(j, token="tok"))
     r = c.post("/api/transcribe", content=b"abc", headers=HEADERS)
     assert r.status_code == 503 and "Install" in r.json()["detail"]
+
+
+# ------------------------------------------------------------- wake word
+
+
+class StubListener:
+    def __init__(self, settings):
+        pass
+
+    def feed(self, pcm):
+        return pcm == b"hey jarvis"
+
+
+def _wake(client, token="tok", origin="http://testserver"):
+    return client.websocket_connect(f"/ws/wake?token={token}", headers={"origin": origin})
+
+
+def test_wake_socket_reports_detections_and_logs_them(make_jarvis, monkeypatch):
+    from jarvis.voice import wake
+
+    monkeypatch.setattr(wake, "WakeListener", StubListener)
+    j, _ = make_jarvis()
+    c = TestClient(server.create_app(j, token="tok"))
+    with _wake(c) as ws:
+        assert ws.receive_json() == {"type": "ready"}
+        ws.send_bytes(b"background chatter")
+        ws.send_bytes(b"hey jarvis")
+        assert ws.receive_json() == {"type": "wake"}  # the chatter produced nothing
+        # While the emergency stop is engaged, the wake word does nothing.
+        j.kill.trip()
+        ws.send_bytes(b"hey jarvis")
+        j.kill.reset()
+        ws.send_bytes(b"hey jarvis")
+        assert ws.receive_json() == {"type": "wake"}
+    assert [e["event"] for e in j.log.tail(5)].count("wake_word") == 2
+
+
+def test_wake_socket_requires_token_and_own_origin(make_jarvis):
+    from starlette.websockets import WebSocketDisconnect
+
+    j, _ = make_jarvis()
+    c = TestClient(server.create_app(j, token="tok"))
+    for token, origin in [("wrong", "http://testserver"), ("tok", "http://evil.example")]:
+        with pytest.raises(WebSocketDisconnect):
+            with _wake(c, token, origin) as ws:
+                ws.receive_json()
+
+
+def test_wake_socket_says_when_unavailable(make_jarvis, monkeypatch):
+    from jarvis.voice import wake
+
+    def broken(settings):
+        raise wake.WakeUnavailable("not installed")
+
+    monkeypatch.setattr(wake, "WakeListener", broken)
+    j, _ = make_jarvis()
+    with _wake(TestClient(server.create_app(j, token="tok"))) as ws:
+        assert ws.receive_json() == {"type": "unavailable", "detail": "not installed"}
+
+
+def test_real_detector_ignores_silence_and_noise(settings):
+    np = pytest.importorskip("numpy")
+    pytest.importorskip("openwakeword")
+    from jarvis.voice import wake
+
+    if not wake.models_present():
+        pytest.skip("wake-word model not downloaded")
+    listener = wake.WakeListener(settings)
+    assert listener.feed(np.zeros(32000, np.int16).tobytes()) is False
+    noise = (np.random.default_rng(0).normal(0, 800, 32000)).astype(np.int16)
+    assert listener.feed(noise.tobytes()) is False
+    assert listener.feed(b"\x01") is False  # an odd-length scrap must not crash it
