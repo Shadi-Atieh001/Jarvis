@@ -18,29 +18,55 @@ from jarvis.core.config import REPO_ROOT
 ICON = Path(__file__).parent / "web" / "jarvis.ico"
 
 
-def powershell_script(pythonw: Path, workdir: Path, icon: Path) -> str:
-    """The PowerShell that creates both shortcuts. Windows has no simpler
-    built-in way to make a .lnk file."""
+def _quote(value) -> str:  # a PowerShell single-quoted string
+    return "'" + str(value).replace("'", "''") + "'"
 
-    def quote(value) -> str:  # PowerShell single-quoted string
-        return "'" + str(value).replace("'", "''") + "'"
 
+def powershell_script(pythonw: Path, workdir: Path, icon: Path, folders=("Desktop", "Programs"), arguments: str = "-m jarvis") -> str:
+    """The PowerShell that creates the shortcuts. Windows has no simpler
+    built-in way to make a .lnk file. 'Programs' is the Start menu;
+    'Startup' is the folder of things Windows starts when you sign in."""
+    wanted = ", ".join(f"[Environment]::GetFolderPath({_quote(f)})" for f in folders)
     return "\n".join(
         [
             "$shell = New-Object -ComObject WScript.Shell",
-            "$folders = @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs'))",
+            f"$folders = @({wanted})",
             "foreach ($folder in $folders) {",
             "  $link = $shell.CreateShortcut((Join-Path $folder 'JARVIS.lnk'))",
-            f"  $link.TargetPath = {quote(pythonw)}",
-            "  $link.Arguments = '-m jarvis'",
-            f"  $link.WorkingDirectory = {quote(workdir)}",
-            f"  $link.IconLocation = {quote(icon)}",
+            f"  $link.TargetPath = {_quote(pythonw)}",
+            f"  $link.Arguments = {_quote(arguments)}",
+            f"  $link.WorkingDirectory = {_quote(workdir)}",
+            f"  $link.IconLocation = {_quote(icon)}",
             "  $link.Description = 'JARVIS personal assistant'",
             "  $link.Save()",
             "  Write-Output $link.FullName",
             "}",
         ]
     )
+
+
+def _run(script: str):
+    return subprocess.run(
+        ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script], capture_output=True, text=True
+    )
+
+
+def autostart(turn_on: bool, out=print) -> int:
+    """Start JARVIS, hidden in the tray, whenever you sign in to Windows."""
+    if sys.platform != "win32":
+        out("This only works on Windows.")
+        return 1
+    if turn_on:
+        pythonw = Path(sys.executable).with_name("pythonw.exe")
+        result = _run(powershell_script(pythonw, REPO_ROOT, ICON, folders=("Startup",), arguments="-m jarvis --tray"))
+        if result.returncode != 0:
+            out(f"Windows refused:\n{result.stderr.strip()}")
+            return 1
+        out("JARVIS will now start in the tray (by the clock) each time you sign in to Windows.")
+    else:
+        _run("Remove-Item -ErrorAction SilentlyContinue (Join-Path ([Environment]::GetFolderPath('Startup')) 'JARVIS.lnk')")
+        out("JARVIS will no longer start with Windows.")
+    return 0
 
 
 def install(out=print) -> int:
@@ -51,11 +77,7 @@ def install(out=print) -> int:
     if not pythonw.exists():
         out(f"Could not find {pythonw}. Run this command with the Python inside the .venv folder.")
         return 1
-    script = powershell_script(pythonw, REPO_ROOT, ICON)
-    result = subprocess.run(
-        ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
-        capture_output=True, text=True,
-    )
+    result = _run(powershell_script(pythonw, REPO_ROOT, ICON))
     if result.returncode != 0:
         out(f"Windows refused to create the shortcut:\n{result.stderr.strip()}")
         return 1

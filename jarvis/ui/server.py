@@ -33,6 +33,8 @@ from fastapi.responses import HTMLResponse, Response
 from jarvis.core import commands
 from jarvis.core.agent import Jarvis
 from jarvis.core.permissions import Decision
+from jarvis.scheduler.runner import Scheduler
+from jarvis.scheduler.store import describe_when
 from jarvis.voice.engine import Voice, VoiceUnavailable
 
 MAX_AUDIO_BYTES = 20_000_000  # about ten minutes of speech
@@ -91,10 +93,59 @@ class WebUI:
             answered.set()
 
 
-def create_app(jarvis: Jarvis, token: str | None = None) -> FastAPI:
+def create_app(jarvis: Jarvis, token: str | None = None, make_agent=None) -> FastAPI:
     token = token or secrets.token_urlsafe(24)
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     app.state.token = token
+    app.state.windows = []  # the WebUI of each open window, newest last
+    app.state.notify = None  # set by the tray icon: notify(title, text)
+
+    # ---- scheduling: results go to the open window (and the tray, if any)
+
+    def deliver(item: dict, text: str) -> None:
+        for ui in list(app.state.windows):
+            ui._send({"type": "scheduled", "title": item["title"], "text": text})
+        if app.state.notify is not None:
+            app.state.notify(item["title"], text if len(text) <= 220 else text[:217] + "...")
+
+    def ask(tool_name: str, decision: Decision) -> bool:
+        if not app.state.windows:
+            return False
+        if app.state.notify is not None:
+            app.state.notify("JARVIS needs your approval", f"A scheduled task wants to use {tool_name}. Open JARVIS to answer.")
+        return app.state.windows[-1].confirm(tool_name, decision)
+
+    def scheduled_agent() -> Jarvis:
+        agent = make_agent() if make_agent else Jarvis(jarvis.settings, jarvis.registry, jarvis.log, jarvis.kill)
+        agent.ctx.schedule = scheduler.schedule
+        return agent
+
+    scheduler = Scheduler(jarvis, deliver, ask, scheduled_agent)
+    jarvis.ctx.schedule = scheduler.schedule
+    app.state.scheduler = scheduler
+
+    @app.get("/api/schedule")
+    def schedule_list(request: Request) -> dict:
+        authorise(request)
+        items = sorted(scheduler.schedule.items(), key=lambda i: i.get("next") or "")
+        return {"items": [{**i, "when": describe_when(i)} for i in items]}
+
+    @app.delete("/api/schedule/{item_id}")
+    def schedule_remove(item_id: int, request: Request) -> dict:
+        authorise(request)
+        if not scheduler.schedule.remove(item_id):
+            raise HTTPException(status_code=404)
+        jarvis.log.record("scheduled", detail=f"item #{item_id} cancelled from the control panel")
+        return {"ok": True}
+
+    @app.post("/api/schedule/{item_id}/run")
+    def schedule_run(item_id: int, request: Request) -> dict:
+        authorise(request)
+        item = scheduler.schedule.get(item_id)
+        if item is None:
+            raise HTTPException(status_code=404)
+        threading.Thread(target=scheduler.run, args=(item,), daemon=True).start()
+        return {"ok": True}
 
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
@@ -162,27 +213,27 @@ def create_app(jarvis: Jarvis, token: str | None = None) -> FastAPI:
     @app.get("/api/connections")
     def connections(request: Request) -> dict:
         authorise(request)
-        from jarvis.integrations import oauth
+        from jarvis.integrations import accounts
 
         result = []
-        for provider in oauth.PROVIDERS.values():
+        for account in accounts.ACCOUNTS.values():
             try:
-                connected = oauth.is_connected(provider)
+                connected = accounts.is_connected(account)
             except Exception:
                 connected = False
-            result.append({"key": provider.key, "label": provider.label, "connected": connected})
+            result.append({"key": account.key, "label": account.label, "connected": connected})
         return {"connections": result}
 
     @app.post("/api/connections/{key}/disconnect")
     def disconnect(key: str, request: Request) -> dict:
         authorise(request)
-        from jarvis.integrations import oauth
+        from jarvis.integrations import accounts
 
-        provider = oauth.PROVIDERS.get(key)
-        if provider is None:
+        account = accounts.ACCOUNTS.get(key)
+        if account is None:
             raise HTTPException(status_code=404)
-        oauth.disconnect(provider)
-        jarvis.log.record("connection", detail=f"{provider.label} disconnected from the control panel")
+        accounts.disconnect(account)
+        jarvis.log.record("connection", detail=f"{account.label} disconnected from the control panel")
         return {"ok": True}
 
     @app.get("/api/settings")
@@ -267,6 +318,7 @@ def create_app(jarvis: Jarvis, token: str | None = None) -> FastAPI:
 
         loop = asyncio.get_running_loop()
         ui = WebUI(ws, loop, jarvis)
+        app.state.windows.append(ui)
         busy = threading.Lock()
         jarvis.log.record("session_start", detail="window")
         if jarvis.kill.tripped:
@@ -316,12 +368,16 @@ def create_app(jarvis: Jarvis, token: str | None = None) -> FastAPI:
                     threading.Thread(target=work, args=(text,), daemon=True).start()
         except WebSocketDisconnect:
             ui.cancel_all()
+        finally:
+            if ui in app.state.windows:
+                app.state.windows.remove(ui)
 
     return app
 
 
-def serve(jarvis: Jarvis, port: int = 0) -> tuple[threading.Thread, str]:
-    """Start the server on a background thread. Returns (thread, url)."""
+def serve(jarvis: Jarvis, port: int = 0) -> tuple[threading.Thread, str, FastAPI]:
+    """Start the server (and the scheduler) on background threads.
+    Returns (thread, url, app)."""
     import socket
 
     import uvicorn
@@ -331,8 +387,9 @@ def serve(jarvis: Jarvis, port: int = 0) -> tuple[threading.Thread, str]:
             s.bind(("127.0.0.1", 0))
             port = s.getsockname()[1]
     app = create_app(jarvis)
+    app.state.scheduler.start()
     config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
     server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
-    return thread, f"http://127.0.0.1:{port}/"
+    return thread, f"http://127.0.0.1:{port}/", app

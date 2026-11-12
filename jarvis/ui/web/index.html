@@ -100,6 +100,8 @@
   .msg strong { color: #f2fbff; font-weight: 600; }
   .msg strong.heading { color: var(--accent); letter-spacing: .02em; }
   .msg code { font: 13px var(--mono); background: rgba(79, 216, 255, .10); border: 1px solid var(--line); padding: 0 5px; border-radius: 2px; }
+  .msg.scheduled { border-left-color: var(--warn); }
+  .msg.scheduled .label { color: var(--warn); margin-bottom: 6px; }
   .msg.info { color: var(--muted); font: 12.5px/1.5 var(--mono); border-left: 2px solid var(--line); padding-left: 12px; }
   .msg pre, .confirm pre {
     background: rgba(2, 6, 10, .85); border: 1px solid var(--line); border-radius: 2px;
@@ -162,7 +164,7 @@
   .panel-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--line); }
   .tabs { display: flex; border-bottom: 1px solid var(--line); }
   .tabs button {
-    flex: 1; padding: 12px 4px; font: 600 11px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase;
+    flex: 1; padding: 12px 2px; font: 600 10.5px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase;
     color: var(--muted); border: 0; border-bottom: 2px solid transparent;
   }
   .tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
@@ -252,6 +254,7 @@
     <button id="panel-close" class="ghost" aria-label="Close the control panel">CLOSE</button>
   </div>
   <div class="tabs" role="tablist">
+    <button role="tab" data-tab="schedule">Schedule</button>
     <button role="tab" data-tab="memory">Memory</button>
     <button role="tab" data-tab="activity">Activity</button>
     <button role="tab" data-tab="accounts">Accounts</button>
@@ -364,6 +367,16 @@ function handle(m) {
     if (/stop engaged/i.test(m.text)) { halted = true; speech.stop(); }
     if (/stop cleared/i.test(m.text)) halted = false;
     refreshMode();
+  } else if (m.type === "scheduled") {
+    // A reminder or scheduled task has fired. Show it, and say it aloud.
+    const block = add(el("div", "msg jarvis scheduled"));
+    block.appendChild(el("div", "label", "Scheduled · " + m.title));
+    const body = block.appendChild(el("div"));
+    render(body, m.text);
+    if (!muted && info.speak_replies !== "never" && !recorder.active) {
+      chime();
+      m.text.split(/(?<=[.!?…])\s+|\n+/).forEach((sentence) => speech.sentence(sentence + " "));
+    }
   } else if (m.type === "done") {
     current = null; busy = false; awaitingApproval = 0;
     speech.flush();
@@ -741,7 +754,7 @@ muteBtn.onclick = () => {
 
 /* ---------------------------------------------------- control panel */
 const panel = {
-  tab: "memory",
+  tab: "schedule",
   open() { $("panel").hidden = false; $("scrim").hidden = false; this.show(this.tab); $("panel-close").focus(); },
   close() { $("panel").hidden = true; $("scrim").hidden = true; $("panel-open").focus(); },
   async show(tab) {
@@ -753,6 +766,28 @@ const panel = {
     catch (err) { body.replaceChildren(el("p", "", "Could not load this: " + err.message)); }
   },
   async json(path, options) { return (await api(path, options)).json(); },
+
+  async schedule() {
+    const data = await this.json("/api/schedule");
+    const out = [el("p", "", "Reminders and scheduled tasks. They run only while JARVIS is open or in the tray. To add one, just ask: \"remind me at six to call Layla\".")];
+    if (!data.items.length) out.push(el("p", "", "Nothing is scheduled."));
+    for (const item of data.items) {
+      const row = el("div", "row"), text = el("div", "grow", item.title);
+      const next = item.next ? new Date(item.next).toLocaleString([], { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "never";
+      text.appendChild(el("small", "", item.daily_at ? `${item.when} · next: ${next}` : item.when));
+      text.appendChild(el("small", "", item.text.length > 140 ? item.text.slice(0, 140) + "…" : item.text));
+      const buttons = el("div");
+      buttons.style.cssText = "display:flex;flex-direction:column;gap:6px";
+      const now = el("button", "small-btn", "Run now");
+      now.onclick = async () => { await api(`/api/schedule/${item.id}/run`, { method: "POST" }); now.textContent = "Running…"; now.disabled = true; };
+      const cancel = el("button", "small-btn danger", "Cancel");
+      cancel.onclick = async () => { await api(`/api/schedule/${item.id}`, { method: "DELETE" }); this.show("schedule"); };
+      buttons.append(now, cancel);
+      row.append(el("span", "tag" + (item.kind === "task" ? " warn" : ""), item.kind), text, buttons);
+      out.push(row);
+    }
+    return out;
+  },
 
   async memory() {
     const data = await this.json("/api/memories");

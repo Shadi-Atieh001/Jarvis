@@ -204,7 +204,7 @@ def test_accounts_panel(client, monkeypatch):
     monkeypatch.setattr(secrets, "delete", lambda name: store.pop(name, None))
     c, _ = client
     status = {x["key"]: x["connected"] for x in c.get("/api/connections", headers=HEADERS).json()["connections"]}
-    assert status == {"google": True, "spotify": False}
+    assert status == {"google": True, "spotify": False, "github": False, "notion": False}
     assert c.post("/api/connections/google/disconnect", headers=HEADERS).status_code == 200 and store == {}
     assert c.post("/api/connections/myspace/disconnect", headers=HEADERS).status_code == 404
 

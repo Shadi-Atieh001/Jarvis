@@ -11,6 +11,8 @@
   disconnect google|spotify   sign out and delete the stored tokens
   connections                 show which accounts are connected
   install-shortcut            add JARVIS to the desktop and Start menu
+  autostart on|off            start JARVIS in the tray when you sign in to Windows
+Add --tray to "app" to start hidden in the tray.
 """
 
 from __future__ import annotations
@@ -25,6 +27,8 @@ from jarvis.core.killswitch import KillSwitch
 
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
+    start_hidden = "--tray" in argv
+    argv = [a for a in argv if a != "--tray"]
     command = argv[0] if argv else "app"
 
     # These three must work even when JARVIS itself is broken or busy,
@@ -44,6 +48,14 @@ def main(argv: list[str] | None = None) -> int:
             n = int(argv[1]) if len(argv) > 1 and argv[1].isdigit() else 20
             print(format_entries(log.tail(n)))
         return 0
+
+    if command == "autostart":
+        from jarvis.ui.shortcut import autostart
+
+        if len(argv) < 2 or argv[1] not in ("on", "off"):
+            print("Usage: python -m jarvis autostart on|off")
+            return 2
+        return autostart(argv[1] == "on")
 
     if command == "install-shortcut":
         from jarvis.ui.shortcut import install
@@ -101,7 +113,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         from jarvis.ui.desktop import run_window
 
-        run_window(jarvis)
+        run_window(jarvis, start_hidden=start_hidden)
     return 0
 
 

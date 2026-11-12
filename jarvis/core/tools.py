@@ -33,6 +33,7 @@ class ToolContext:
     settings: "Settings"
     kill: "KillSwitch"
     memory: Any = None  # the MemoryStore, for the memory tools
+    schedule: Any = None  # the Schedule, for the scheduling tools (window only)
 
     @property
     def workspace(self) -> Path:

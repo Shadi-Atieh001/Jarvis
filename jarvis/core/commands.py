@@ -9,11 +9,13 @@ from __future__ import annotations
 from .actionlog import format_entries
 from .agent import Jarvis
 from jarvis.memory.store import format_memories
+from jarvis.scheduler.store import format_items
 
 HELP = """Commands:
   /help            show this list
   /tools           list the tools JARVIS has and their permission tiers
   /log [n]         show the last n actions (default 20)
+  /schedule        show reminders and scheduled tasks;  /unschedule <number>  cancels one
   /memories [text] show what JARVIS remembers (optionally: about text)
   /forget <number> delete one memory;  /forget all  deletes everything
   /stop            emergency stop: halt everything and refuse further actions
@@ -47,6 +49,16 @@ def handle(text: str, jarvis: Jarvis) -> str | None:
     if cmd == "/log":
         n = int(args[0]) if args and args[0].isdigit() else 20
         return format_entries(jarvis.log.tail(n))
+    if cmd in ("/schedule", "/unschedule"):
+        schedule = jarvis.ctx.schedule
+        if schedule is None:
+            return "Scheduling is only available in the JARVIS window."
+        if cmd == "/schedule":
+            return "Scheduled:\n" + format_items(schedule.items())
+        if not args or not args[0].lstrip("#").isdigit():
+            return "Usage: /unschedule <number>   (see /schedule for the numbers)"
+        number = int(args[0].lstrip("#"))
+        return f"Cancelled #{number}." if schedule.remove(number) else f"There is no scheduled item #{number}."
     if cmd in ("/memories", "/memory"):
         if jarvis.memory is None:
             return "Memory is switched off in settings.toml."

@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.10.0 — Scheduling, the tray icon, GitHub and Notion (2026-11-12)
+
+Added
+- Reminders and scheduled tasks (`schedule_add`, `schedule_list`,
+  `schedule_remove`; `/schedule`, `/unschedule`; a Schedule tab in the
+  control panel). Results are shown, spoken and sent as notifications.
+- A ready-made morning briefing at 08:00: weather, calendar, unread email.
+- A `weather` tool (Open-Meteo; no key).
+- A tray icon: closing the window hides JARVIS, which keeps listening and
+  keeps its schedule. `python -m jarvis autostart on` starts it in the tray
+  when you sign in to Windows.
+- GitHub (`github_repos`, `github_issues`, `github_read`, `github_file`,
+  `github_notifications`, `github_create_issue`, `github_comment`) and
+  Notion (`notion_search`, `notion_read`, `notion_create_page`,
+  `notion_append`), connected with `python -m jarvis connect github|notion`.
+
+Changed
+- The window can play sound and use the microphone without a first click,
+  so the wake word and spoken reminders work when JARVIS starts hidden.
+
+Not yet verified
+- The tray icon, hiding the window, starting with Windows and Windows
+  notifications are Windows-only and untested here. In particular, the
+  wake word while the window is hidden has not been tried.
+- GitHub and Notion are tested against stand-ins following their published
+  interfaces, not live accounts. The weather service rate-limited the build
+  machine, so the weather tool is likewise tested with stand-in data.
+
 ## 0.9.0 — Launcher, documents, follow-up listening, control panel (2026-11-12)
 
 Added

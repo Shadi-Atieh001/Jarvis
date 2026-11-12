@@ -3,8 +3,8 @@
 A personal AI assistant that runs on your own machine and acts on your behalf,
 with a permission system that decides what it may do without asking.
 
-**Status: Phase 1 of 5.** It runs free on a local model through Ollama, or
-on Claude through the Anthropic API. Chat, the agent loop, file/shell/code tools,
+**Status:** all planned phases are built. It runs on a hosted model, a free
+local model through Ollama, or Claude through the Anthropic API. Chat, the agent loop, file/shell/code tools,
 permissions, the action log and the emergency stop are built. Memory,
 integrations (Gmail, Calendar, Notion, Spotify, GitHub, WhatsApp),
 scheduling and voice come next; see [Roadmap](#roadmap).
@@ -108,6 +108,8 @@ JARVIS), never in a file. Your passwords never reach JARVIS.
 | `python -m jarvis connections` | Shows what is connected |
 | `python -m jarvis connect google` | Signs in to Gmail and Calendar |
 | `python -m jarvis connect spotify` | Signs in to Spotify |
+| `python -m jarvis connect github` | Stores a GitHub access token |
+| `python -m jarvis connect notion` | Stores a Notion integration secret |
 | `python -m jarvis disconnect google` | Signs out and deletes the stored tokens |
 
 ### Connecting Google (about 10 minutes, once)
@@ -170,6 +172,48 @@ dashboard and add your own Spotify email address there.
 Spotify must be open on some device for there to be something to control;
 JARVIS can open the app for you first. The sign-in lasts six months, after
 which `connect spotify` is needed again.
+
+### Connecting GitHub (about 3 minutes, once)
+
+1. Go to <https://github.com/settings/personal-access-tokens/new> (Settings
+   > Developer settings > Personal access tokens > Fine-grained tokens).
+2. Name it `JARVIS`, choose an expiry, and under **Repository access** pick
+   All repositories, or only the ones JARVIS should see.
+3. Under **Permissions > Repository permissions**, set **Contents** to
+   Read-only, and **Issues** and **Pull requests** to Read and write (or
+   Read-only, if JARVIS should never post).
+4. Click Generate token and copy it. Then:
+
+   ```powershell
+   .venv\Scripts\python -m jarvis connect github
+   ```
+
+   Paste the token when asked (it will not show as you type).
+
+JARVIS can then list your repositories, read issues, pull requests and
+files, and open issues or post comments. Posting always shows you the text
+and asks first, because it is public. Notifications need a "classic" token
+with the `notifications` scope; with a fine-grained token that one tool
+will report that it lacks permission.
+
+### Connecting Notion (about 3 minutes, once)
+
+1. Go to <https://www.notion.so/profile/integrations> and click New
+   integration. Name it `JARVIS`, choose your workspace, type Internal.
+2. Copy the **Internal Integration Secret**. Then:
+
+   ```powershell
+   .venv\Scripts\python -m jarvis connect notion
+   ```
+
+   Paste the secret when asked.
+3. **Share pages with it.** Notion shows an integration nothing until you
+   do: open a page in Notion, click `...` at the top right, choose
+   Connections, and add JARVIS. Sharing a page also shares everything
+   beneath it, so sharing one top-level page is usually enough.
+
+JARVIS can then search your pages, read them, create new pages beneath an
+existing one, and add text to a page.
 
 ## Memory
 
@@ -274,10 +318,66 @@ have printed is kept in `~/.jarvis/jarvis.log`.
 
 If you ever move the Jarvis folder, run the command again.
 
+## Reminders, scheduled tasks and the morning briefing
+
+Just ask: "remind me at six to call Layla", "every weekday at 7:30 tell me
+my first class", "every Friday at five summarise this week's email".
+
+- A **reminder** says and shows a fixed message at the time.
+- A **task** carries out a request at the time, as if you had just asked,
+  in its own conversation. The **morning briefing** is a task that comes
+  ready-made: every day at 08:00 it reads out Sharjah's weather, today's
+  calendar and a summary of unread email. Change its time by cancelling it
+  and asking for a new one, or delete it; it will not come back.
+- Results appear in the window, are spoken aloud (unless muted or speaking
+  is set to Never), and show as a Windows notification.
+- See, run or cancel everything under **CONTROL > Schedule**, or with
+  `/schedule` and `/unschedule 3`.
+
+Things to know:
+
+- **JARVIS must be running**, in the window or in the tray. Nothing fires
+  while it is closed. If it starts within a few hours of a missed item
+  (12 hours for a one-off, 3 for a repeating one), the item runs then and
+  says it is late.
+- **Unattended tasks follow the same permission rules.** If one needs your
+  approval, a card appears in the window; with no answer in two minutes,
+  the answer is no. The briefing reads email, so in trusted mode anything
+  it tried to change afterwards would need your approval.
+- **Scheduling asks first if JARVIS has just read a web page or email**, so
+  hidden instructions cannot plant a task to run later unseen.
+- **The emergency stop pauses the schedule.** Items due during a stop run
+  when it is cleared.
+- The list lives in `~/.jarvis/schedule.json`, which you can read or edit
+  while JARVIS is closed.
+
+Weather comes from Open-Meteo, a free service with no account or key.
+
+## The tray icon and starting with Windows
+
+With the tray icon, closing the window hides JARVIS instead of quitting it.
+It keeps listening for "Hey Jarvis" and keeps firing reminders. Find the
+icon by the clock (it may be under the small up-arrow). Double-click it to
+open the window; right-click for Open, Emergency stop and Quit.
+
+To have JARVIS start in the tray whenever you sign in to Windows:
+
+```powershell
+.venv\Scripts\python -m jarvis autostart on
+```
+
+`autostart off` undoes it. This is what makes an 8am briefing practical:
+JARVIS is already running when the time comes.
+
+While JARVIS sits in the tray the microphone stays open for the wake word,
+exactly as it does with the window showing. Turn the wake word off in
+**CONTROL > Settings** if you would rather it did not.
+
 ## The control panel
 
 Click **CONTROL** at the top right of the window:
 
+- **Schedule**: reminders and scheduled tasks, with Run now and Cancel.
 - **Memory**: everything JARVIS remembers, with a Forget button on each
   item and one to forget everything.
 - **Activity**: the action log, newest first.
@@ -305,6 +405,7 @@ through its file tools.
 | `python -m jarvis log 50` | Shows the last 50 actions |
 | `python -m jarvis setup` | Downloads and tests the memory and speech models |
 | `python -m jarvis install-shortcut` | Adds JARVIS to the desktop and Start menu |
+| `python -m jarvis autostart on` | Starts JARVIS in the tray when you sign in |
 | `python -m pytest` | Runs the tests |
 
 Inside a chat, type `/help` for commands: `/tools`, `/log`, `/stop`,
@@ -324,6 +425,10 @@ Inside a chat, type `/help` for commands: `/tools`, `/log`, `/stop`,
 | Gmail | search, read, send, draft |
 | Google Calendar | list, add and delete events |
 | Spotify | play, queue, pause, skip, volume, what's playing |
+| GitHub | repositories, issues, pull requests, files, notifications; open issues, comment |
+| Notion | search, read, create and add to pages |
+| Schedule | reminders, recurring tasks, the morning briefing |
+| Weather | current conditions and a three-day forecast |
 
 **How it "sees" the screen.** The current model reads text only, so JARVIS
 does not look at screenshots. It asks Windows what each window contains
@@ -429,8 +534,10 @@ jarvis/
     commands.py      /slash commands
     config.py        reads settings.toml
   memory/store.py    long-term memory (SQLite and local embeddings)
+  scheduler/         the schedule (store.py) and what runs it (runner.py)
   voice/engine.py    speech-to-text and text-to-speech
-  integrations/      sign-in (OAuth) for Google and Spotify
+  integrations/      sign-in for Google and Spotify (oauth.py), GitHub and
+                     Notion (tokens.py)
   tools/             one file per group of tools: files, shell, code, web,
                      documents, desktop, memory, google, spotify
   ui/
@@ -497,12 +604,9 @@ asking permission), `blockable_text` (text checked against blocked patterns).
 
 ## Roadmap
 
-1. **Core** — done.
-2. **Memory** — SQLite with local embeddings; `/memories` to view and delete.
-3. **Integrations** — Gmail and Calendar, then GitHub, Notion, Spotify, web
-   search and browsing, then WhatsApp Web. Tokens stored in Windows
-   Credential Manager.
-4. **Scheduling** — reminders, recurring tasks, the 8am briefing; tray icon
-   and start at login.
-5. **Voice** — "Hey Jarvis" wake word, local speech-to-text and
-   text-to-speech.
+Everything in the original plan is built: the core, memory, the
+integrations, scheduling and voice. Ideas not yet done:
+
+- WhatsApp, which today works only by controlling WhatsApp Web on screen.
+- Seeing screenshots, which needs a model that accepts images.
+- A sandbox stronger than a folder (a container or virtual machine).
