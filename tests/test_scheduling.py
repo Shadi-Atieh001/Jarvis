@@ -296,3 +296,71 @@ def test_schedule_panel(make_jarvis):
     assert c.delete(f"/api/schedule/{items[0]['id']}", headers=HEADERS).status_code == 404
     assert c.post("/api/schedule/999/run", headers=HEADERS).status_code == 404
     assert c.get("/api/schedule", headers=HEADERS).json()["items"] == []
+
+
+# ------------------------------------------------- widgets and quick launch
+
+
+def test_status_feeds_the_widgets(make_jarvis, monkeypatch):
+    from jarvis.core import secrets
+
+    monkeypatch.setattr(secrets, "get", {"google.refresh_token": "x"}.get)
+    monkeypatch.setattr(weather_tool, "_glance_cache", {})
+    monkeypatch.setattr(weather_tool, "_get", lambda url, params: {"results": [{"name": "Sharjah", "latitude": 1, "longitude": 1}]} if "geocoding" in url else FORECAST)
+    j, _ = make_jarvis()
+    j.settings.launcher = [{"label": "Gmail", "open": "https://mail.google.com"}]
+    c = TestClient(server.create_app(j, token="tok"))
+    assert c.get("/api/status").status_code == 403
+    s = c.get("/api/status", headers=HEADERS).json()
+    assert s["disk"]["total_gb"] > 0 and 0 <= s["disk"]["used"] <= 1
+    assert s["weather"] == {"place": "Sharjah", "temperature": 31, "conditions": "mainly clear", "low": 22, "high": 32}
+    assert {a["label"]: a["connected"] for a in s["accounts"]} == {"Google": True, "Spotify": False, "GitHub": False, "Notion": False}
+    assert s["next"]["title"] == BRIEFING_TITLE and s["launcher"] == ["Gmail"]
+
+
+def test_weather_widget_is_cached_and_survives_failure(monkeypatch):
+    calls = []
+
+    def fake(url, params):
+        calls.append(url)
+        return {"results": [{"name": "Sharjah", "latitude": 1, "longitude": 1}]} if "geocoding" in url else FORECAST
+
+    monkeypatch.setattr(weather_tool, "_glance_cache", {})
+    monkeypatch.setattr(weather_tool, "_get", fake)
+    assert weather_tool.glance("Sharjah")["temperature"] == 31
+    assert weather_tool.glance("Sharjah")["temperature"] == 31 and len(calls) == 2  # second time from the cache
+
+    def down(url, params):
+        raise OSError("offline")
+
+    monkeypatch.setattr(weather_tool, "_get", down)
+    assert weather_tool.glance("Dubai") is None  # the widget just stays empty
+
+
+def test_quick_launch_opens_only_configured_entries(make_jarvis, monkeypatch):
+    import webbrowser
+
+    from jarvis.core.tools import ToolResult
+    from jarvis.tools import desktop
+
+    opened = []
+    monkeypatch.setattr(webbrowser, "open", lambda url: opened.append(url) or True)
+    monkeypatch.setattr(desktop, "open_app", lambda args, ctx: opened.append(args["name"]) or ToolResult("ok", is_error=args["name"] == "Missing"))
+    j, _ = make_jarvis()
+    j.settings.launcher = [{"label": "Gmail", "open": "https://mail.google.com"}, {"label": "Notes", "open": "Notepad"}, {"label": "Gone", "open": "Missing"}]
+    c = TestClient(server.create_app(j, token="tok"))
+    assert c.post("/api/launch/0").status_code == 403
+    assert c.post("/api/launch/0", headers=HEADERS).status_code == 200
+    assert c.post("/api/launch/1", headers=HEADERS).status_code == 200
+    assert opened == ["https://mail.google.com", "Notepad"]
+    assert c.post("/api/launch/2", headers=HEADERS).status_code == 400   # could not be opened
+    assert c.post("/api/launch/9", headers=HEADERS).status_code == 404   # not on the list
+    assert c.post("/api/launch/-1", headers=HEADERS).status_code == 404
+    assert [e["event"] for e in j.log.tail(10)].count("launch") == 3
+
+
+def test_shipped_launcher_entries_load():
+    from jarvis.core.config import REPO_ROOT, load_settings
+
+    items = load_settings(REPO_ROOT / "settings.toml").launcher
+    assert len(items) == 12 and items[0] == {"label": "Documents", "open": "~/Documents"}

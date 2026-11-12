@@ -124,6 +124,70 @@ def create_app(jarvis: Jarvis, token: str | None = None, make_agent=None) -> Fas
     jarvis.ctx.schedule = scheduler.schedule
     app.state.scheduler = scheduler
 
+    # ---- the widgets around the dial
+
+    @app.get("/api/status")
+    def status(request: Request) -> dict:
+        authorise(request)
+        import shutil
+
+        from jarvis.integrations import accounts
+        from jarvis.tools.weather import glance
+
+        usage = shutil.disk_usage(jarvis.settings.home.anchor or "/")
+        result: dict = {
+            "disk": {"total_gb": round(usage.total / 1e9), "free_gb": round(usage.free / 1e9), "used": round(usage.used / usage.total, 3)},
+            "cpu": None, "memory": None, "battery": None,
+        }
+        try:
+            import psutil
+
+            result["cpu"] = round(psutil.cpu_percent(interval=None))
+            result["memory"] = round(psutil.virtual_memory().percent)
+            battery = psutil.sensors_battery()
+            if battery is not None:
+                result["battery"] = {"percent": round(battery.percent), "plugged": bool(battery.power_plugged)}
+        except Exception:
+            pass  # the gauges simply stay empty
+        connected = []
+        for account in accounts.ACCOUNTS.values():
+            try:
+                connected.append({"label": account.label, "connected": accounts.is_connected(account)})
+            except Exception:
+                connected.append({"label": account.label, "connected": False})
+        upcoming = sorted((i for i in scheduler.schedule.items() if i.get("next")), key=lambda i: i["next"])
+        result.update(
+            accounts=connected,
+            next=({"title": upcoming[0]["title"], "at": upcoming[0]["next"]} if upcoming else None),
+            weather=glance(jarvis.settings.location),
+            launcher=[i["label"] for i in jarvis.settings.launcher],
+            memories=jarvis.memory.counts()[0] if jarvis.memory is not None else 0,
+        )
+        return result
+
+    @app.post("/api/launch/{index}")
+    def launch(index: int, request: Request) -> dict:
+        """Open one of the quick-launch entries from settings.toml. Only
+        those entries can be opened this way, never an arbitrary name."""
+        authorise(request)
+        import webbrowser
+
+        from jarvis.tools import desktop
+
+        if not 0 <= index < len(jarvis.settings.launcher):
+            raise HTTPException(status_code=404)
+        entry = jarvis.settings.launcher[index]
+        target = entry["open"]
+        if target.lower().startswith(("http://", "https://")):
+            ok, detail = bool(webbrowser.open(target)), ""
+        else:
+            outcome = desktop.open_app({"name": target}, jarvis.ctx)
+            ok, detail = not outcome.is_error, outcome.text
+        jarvis.log.record("launch", detail=f"{entry['label']} ({target}) from the window" + ("" if ok else f": failed: {detail}"))
+        if not ok:
+            raise HTTPException(status_code=400, detail=detail or "Could not open it.")
+        return {"ok": True}
+
     @app.get("/api/schedule")
     def schedule_list(request: Request) -> dict:
         authorise(request)

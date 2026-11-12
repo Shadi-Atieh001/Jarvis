@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.11.0 — A heads-up-display window (2026-11-12)
+
+Changed
+- The window is redesigned as a HUD: a large segmented central dial on a
+  black field, with live widgets around it.
+- The dial's twelve segments name the tool groups and light up as JARVIS
+  uses them.
+- CONTROL and STOP are restyled as angled keys; they work as before.
+
+Added
+- Widgets: date and clock, processor / memory / disk / battery gauges,
+  connected accounts, the next scheduled item, weather.
+- Quick-launch buttons, configured under `[launcher]` in `settings.toml`.
+- `psutil` is now a dependency, for the system gauges.
+
 ## 0.10.0 — Scheduling, the tray icon, GitHub and Notion (2026-11-12)
 
 Added

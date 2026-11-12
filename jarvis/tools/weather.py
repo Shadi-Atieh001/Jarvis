@@ -26,6 +26,53 @@ def _get(url: str, params: dict) -> dict:
         return json.load(response)
 
 
+def forecast(place: str) -> dict:
+    """Look a place up and fetch its forecast. Returns {"spot", "data"}.
+    Raises LookupError for an unknown place, OSError/ValueError on failure."""
+    found = _get("https://geocoding-api.open-meteo.com/v1/search", {"name": place, "count": 1}).get("results")
+    if not found:
+        raise LookupError(f"No place called {place!r} was found.")
+    spot = found[0]
+    data = _get(
+        "https://api.open-meteo.com/v1/forecast",
+        {
+            "latitude": spot["latitude"], "longitude": spot["longitude"], "timezone": "auto", "forecast_days": 3,
+            "current": "temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m",
+            "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
+        },
+    )
+    if data.get("error"):
+        raise ValueError(f"The weather service refused: {data.get('reason')}")
+    return {"spot": spot, "data": data}
+
+
+_glance_cache: dict = {}
+
+
+def glance(place: str, max_age: float = 1800) -> dict | None:
+    """A few numbers for the weather widget, fetched at most every half hour.
+    Returns None if the weather is unavailable; the widget then shows nothing."""
+    import time
+
+    cached = _glance_cache.get(place)
+    if cached and time.time() - cached[0] < max_age:
+        return cached[1]
+    try:
+        result = forecast(place)
+        now, daily = result["data"]["current"], result["data"]["daily"]
+        summary = {
+            "place": result["spot"]["name"],
+            "temperature": round(now["temperature_2m"]),
+            "conditions": CODES.get(now["weather_code"], ""),
+            "low": round(daily["temperature_2m_min"][0]),
+            "high": round(daily["temperature_2m_max"][0]),
+        }
+    except Exception:
+        summary = None
+    _glance_cache[place] = (time.time(), summary)
+    return summary
+
+
 @tool(
     name="weather",
     description="Current weather and a three-day forecast for a place. Defaults to the user's home location.",
@@ -42,22 +89,14 @@ def _get(url: str, params: dict) -> dict:
 def weather(args: dict, ctx: ToolContext) -> ToolResult:
     place = (args.get("place") or ctx.settings.location).strip()
     try:
-        found = _get("https://geocoding-api.open-meteo.com/v1/search", {"name": place, "count": 1}).get("results")
-        if not found:
-            return ToolResult(f"No place called {place!r} was found.", is_error=True)
-        spot = found[0]
-        data = _get(
-            "https://api.open-meteo.com/v1/forecast",
-            {
-                "latitude": spot["latitude"], "longitude": spot["longitude"], "timezone": "auto", "forecast_days": 3,
-                "current": "temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m",
-                "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
-            },
-        )
-    except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
+        result = forecast(place)
+    except LookupError as exc:
+        return ToolResult(str(exc), is_error=True)
+    except ValueError as exc:
+        return ToolResult(str(exc), is_error=True)
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
         return ToolResult(f"The weather service could not be reached ({getattr(exc, 'reason', exc)}).", is_error=True)
-    if data.get("error"):
-        return ToolResult(f"The weather service refused: {data.get('reason')}", is_error=True)
+    spot, data = result["spot"], result["data"]
 
     now, daily = data["current"], data["daily"]
     lines = [

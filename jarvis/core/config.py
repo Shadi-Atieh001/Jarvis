@@ -32,6 +32,7 @@ class Settings:
     ollama_context_window: int = 8192
     ollama_think: bool = False
 
+    launcher: list = field(default_factory=list)  # quick-launch buttons: {"label", "open"}
     memory_enabled: bool = True
     voice_enabled: bool = True
     whisper_model: str = "base.en"
@@ -94,6 +95,11 @@ def load_settings(path: Path | None = None) -> Settings:
     s.ollama_keep_alive = ollama.get("keep_alive", s.ollama_keep_alive)
 
     s.memory_enabled = data.get("memory", {}).get("enabled", s.memory_enabled)
+    s.launcher = [
+        {"label": str(i["label"]), "open": str(i["open"])}
+        for i in data.get("launcher", {}).get("items", [])
+        if isinstance(i, dict) and i.get("label") and i.get("open")
+    ][:16]
     voice = data.get("voice", {})
     s.voice_enabled = voice.get("enabled", s.voice_enabled)
     s.whisper_model = voice.get("whisper_model", s.whisper_model)

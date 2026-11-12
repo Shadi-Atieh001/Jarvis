@@ -51,6 +51,25 @@ model = "IFM/K2-Horizon-375B-A23B"
 # itself. Store the key with:  setx JARVIS_API_KEY "your-key-here"
 api_key_env = "JARVIS_API_KEY"
 
+[launcher]
+# The quick-launch buttons at the right of the window. "open" is a folder or
+# file path, a web address, or an app's name as it appears in the Start menu.
+# Up to 16.
+items = [
+    { label = "Documents", open = "~/Documents" },
+    { label = "Downloads", open = "~/Downloads" },
+    { label = "Pictures", open = "~/Pictures" },
+    { label = "Music", open = "~/Music" },
+    { label = "Gmail", open = "https://mail.google.com" },
+    { label = "Calendar", open = "https://calendar.google.com" },
+    { label = "YouTube", open = "https://www.youtube.com" },
+    { label = "GitHub", open = "https://github.com" },
+    { label = "Notion", open = "https://www.notion.so" },
+    { label = "Spotify", open = "Spotify" },
+    { label = "Notepad", open = "Notepad" },
+    { label = "Explorer", open = "File Explorer" },
+]
+
 [memory]
 # Remember your preferences, people and projects between conversations, and
 # keep a searchable record of past requests. Stored on this computer in

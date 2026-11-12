@@ -373,6 +373,33 @@ While JARVIS sits in the tray the microphone stays open for the wake word,
 exactly as it does with the window showing. Turn the wake word off in
 **CONTROL > Settings** if you would rather it did not.
 
+## The window
+
+The window is laid out as a heads-up display around a central dial.
+
+- **The dial** shows what JARVIS is doing by colour and motion: cyan
+  standing by or thinking, green listening, amber waiting for your approval,
+  red stopped. The bright ring swells with the sound of your voice or its
+  own. The twelve segments around it name the groups of tools (FILES, WEB,
+  MAIL, MUSIC and so on); each lights up when JARVIS uses a tool from that
+  group, so you can see at a glance what it is touching.
+- **Left**: the date and clock (the ring fills as the day passes), processor,
+  memory, disk and battery gauges, which accounts are connected, and the
+  next scheduled item.
+- **Right**: quick-launch buttons, and the weather for your location.
+- **CONTROL** and **STOP** are at the top right, as before.
+
+When a conversation starts, the dial moves aside to make room for it. In a
+window narrower than about 1040 pixels the side widgets are hidden.
+
+The quick-launch buttons are yours to edit: see `[launcher]` in
+`settings.toml`. Each entry is a label and something to open: a folder, a
+web address, or an app's name as it appears in the Start menu. Clicking one
+opens it directly, without involving the model.
+
+Two fonts are used if present: Bahnschrift (included with Windows 10 and
+11) for the labels and Cascadia Code for monospaced text.
+
 ## The control panel
 
 Click **CONTROL** at the top right of the window:
