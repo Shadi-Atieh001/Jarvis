@@ -109,10 +109,13 @@ def test_unavailable_voice_is_reported(make_jarvis, monkeypatch):
 
 
 class StubListener:
+    fed = 0  # how many chunks the server has examined
+
     def __init__(self, settings):
         pass
 
     def feed(self, pcm):
+        StubListener.fed += 1
         return pcm == b"hey jarvis"
 
 
@@ -120,10 +123,20 @@ def _wake(client, token="tok", origin="http://testserver"):
     return client.websocket_connect(f"/ws/wake?token={token}", headers={"origin": origin})
 
 
+def _wait_until(condition, seconds=5):
+    import time
+
+    deadline = time.monotonic() + seconds
+    while not condition():
+        assert time.monotonic() < deadline, "timed out"
+        time.sleep(0.01)
+
+
 def test_wake_socket_reports_detections_and_logs_them(make_jarvis, monkeypatch):
     from jarvis.voice import wake
 
     monkeypatch.setattr(wake, "WakeListener", StubListener)
+    StubListener.fed = 0
     j, _ = make_jarvis()
     c = TestClient(server.create_app(j, token="tok"))
     with _wake(c) as ws:
@@ -134,6 +147,10 @@ def test_wake_socket_reports_detections_and_logs_them(make_jarvis, monkeypatch):
         # While the emergency stop is engaged, the wake word does nothing.
         j.kill.trip()
         ws.send_bytes(b"hey jarvis")
+        ws.send_bytes(b"background chatter")
+        # Chunks are handled one after another, so once the fourth has been
+        # examined the third (heard while stopped) is completely finished.
+        _wait_until(lambda: StubListener.fed == 4)
         j.kill.reset()
         ws.send_bytes(b"hey jarvis")
         assert ws.receive_json() == {"type": "wake"}
