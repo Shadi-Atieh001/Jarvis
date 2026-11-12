@@ -1,19 +1,81 @@
 # JARVIS
 
-A personal AI assistant that runs on your own machine and acts on your behalf,
-with a permission system that decides what it may do without asking.
+A personal AI assistant for Windows that runs on your own computer and acts
+on your behalf: it talks, listens, reads and writes files, searches the web,
+works your apps, handles email and calendar, remembers what you tell it, and
+runs reminders, all behind a permission system that decides what it may do
+without asking.
 
-**Status:** all planned phases are built. It runs on a hosted model, a free
-local model through Ollama, or Claude through the Anthropic API. Chat, the agent loop, file/shell/code tools,
-permissions, the action log and the emergency stop are built. Memory,
-integrations (Gmail, Calendar, Notion, Spotify, GitHub, WhatsApp),
-scheduling and voice come next; see [Roadmap](#roadmap).
+![The JARVIS window](docs/screenshot.png)
+
+This is a personal project, built and tested on one Windows 11 laptop. The
+core runs on any system with Python; the window's tray icon, the shortcuts
+and the screen control are Windows-only.
+
+## Contents
+
+- [What JARVIS can do](#what-jarvis-can-do)
+- [Setup (Windows)](#setup-windows)
+- [Choosing a brain](#choosing-a-brain)
+- [Running](#running)
+- [The window](#the-window) and [the control panel](#the-control-panel)
+- [Voice](#voice)
+- [Memory](#memory)
+- [Reminders, scheduled tasks and the morning briefing](#reminders-scheduled-tasks-and-the-morning-briefing)
+- [The tray icon and starting with Windows](#the-tray-icon-and-starting-with-windows)
+- [Connecting your accounts](#connecting-your-accounts)
+- [Permissions](#permissions)
+- [What leaves your computer](#what-leaves-your-computer)
+- [How it is organised](#how-it-is-organised)
+- [Decisions you may need to understand](#decisions-you-may-need-to-understand)
+- [Roadmap](#roadmap)
+
+## What JARVIS can do
+
+| Area | Tools |
+|---|---|
+| Files | read, list, search, write, move, delete |
+| Documents | read PDF, Word, PowerPoint and Excel files |
+| Commands and code | run PowerShell commands; write and run Python in the workspace |
+| Web | search the web, read a page's text, open a page in your browser |
+| Screen | list open windows, read what is in a window, open apps |
+| Mouse and keyboard | click, type, press key combinations |
+| Memory | remember, recall, forget |
+| Gmail | search, read, send, draft |
+| Google Calendar | list, add and delete events |
+| Spotify | play, queue, pause, skip, volume, what's playing |
+| GitHub | repositories, issues, pull requests, files, notifications; open issues, comment |
+| Notion | search, read, create and add to pages |
+| Schedule | reminders, recurring tasks, the morning briefing |
+| Weather | current conditions and a three-day forecast |
+
+**How it "sees" the screen.** The current model reads text only, so JARVIS
+does not look at screenshots. It asks Windows what each window contains
+(titles, buttons, menus, text fields and their contents), the same way a
+screen reader does. That works well for ordinary apps and browsers. Apps
+that draw their own interface, such as games, video and images, expose
+little or nothing.
+
+**Documents.** `read_document` extracts the text of `.pdf`, `.docx`,
+`.pptx` (including speaker notes) and `.xlsx` files, so you can ask for a
+summary of a lecture, a quiz on a chapter, or the deadlines in a syllabus.
+Long documents are read in parts. Two limits: a scanned PDF is pictures of
+pages and has no text to read, and the old `.doc`, `.ppt` and `.xls`
+formats are not supported (save them as the modern format first).
+
+**Web search** uses free public search engines through the `ddgs` library,
+with no account or key. They sometimes rate-limit; if a search fails, wait a
+minute. Pages that need a login or build their content with scripts may
+come back nearly empty; for those, JARVIS can open the page in your browser
+and read it from the screen instead.
 
 ## Setup (Windows)
 
-1. Install [Python 3.13 or newer](https://www.python.org/downloads/windows/).
-   Tick "Add python.exe to PATH" in the installer.
-2. Open PowerShell and get the code:
+1. Install [Python 3.14](https://www.python.org/downloads/windows/) and tick
+   "Add python.exe to PATH". Python 3.13 also works. Python 3.15 runs
+   everything except voice, because the speech libraries do not support it
+   yet.
+2. Open a terminal (PowerShell or Command Prompt) and get the code:
 
    ```powershell
    git clone https://github.com/Shadi-Atieh001/Jarvis.git
@@ -23,23 +85,78 @@ scheduling and voice come next; see [Roadmap](#roadmap).
 3. Create a private Python environment and install JARVIS into it:
 
    ```powershell
-   py -m venv .venv
-   .venv\Scripts\Activate.ps1
-   pip install -e ".[desktop,dev]"
+   py -3.14 -m venv .venv
+   .venv\Scripts\python -m pip install -e ".[desktop,memory,voice,dev]"
    ```
 
-   If PowerShell refuses to run `Activate.ps1`, use `.venv\Scripts\activate.bat`
-   from Command Prompt instead.
+   The parts in brackets are optional extras: `desktop` (the window, tray
+   icon and screen control), `memory` (search by meaning), `voice` (speech
+   and the wake word) and `dev` (the tests). Leave any out to skip them.
 
-4. Choose a brain (next section).
+4. Download and test the memory and speech models (about 280 MB, once):
+
+   ```powershell
+   .venv\Scripts\python -m jarvis setup
+   ```
+
+5. Choose a brain (next section), then check everything works:
+
+   ```powershell
+   .venv\Scripts\python -m pytest
+   .venv\Scripts\python -m jarvis
+   ```
+
+6. Optional: add a desktop and Start menu icon, so you never need the
+   terminal to start it again:
+
+   ```powershell
+   .venv\Scripts\python -m jarvis install-shortcut
+   ```
+
+The commands in this README are written as `python -m jarvis ...` for
+brevity. Unless you have activated the environment, type
+`.venv\Scripts\python -m jarvis ...` from inside the Jarvis folder.
 
 ## Choosing a brain
 
-`provider` in `settings.toml` decides which model JARVIS thinks with.
+`provider` in `settings.toml` decides which model JARVIS thinks with. There
+are three choices. Whichever you pick, the permission rules, the action log
+and the tools are identical.
 
-### Free: a local model with Ollama (the default)
+| Provider | Cost | Privacy | Quality |
+|---|---|---|---|
+| `openai_compatible` (default) | Depends on the service; some are free | Requests go to that service | Depends on the model |
+| `ollama` | Free | Nothing leaves your computer | Limited by your graphics card |
+| `anthropic` | Paid per use | Requests go to Anthropic | Highest |
 
-1. Install Ollama from <https://ollama.com/download> and let it start.
+### A hosted service with its own key (the default)
+
+Many model services (OpenRouter, Groq, Together and others) use the OpenAI
+"chat completions" format. To use one:
+
+1. In `settings.toml` set `provider = "openai_compatible"`, then under
+   `[openai_compatible]` fill in `base_url` (from the service's API
+   documentation, ending in `/v1`) and `model`. The model must support tool
+   calling. As shipped, these point at the IFM service
+   (`https://api.ifm.ai/v1`, model `IFM/K2-Horizon-375B-A23B`); change them
+   to use another.
+2. Store the key in your Windows user environment, never in a file:
+
+   ```powershell
+   setx JARVIS_API_KEY "your-key-here"
+   ```
+
+3. Open a new terminal and start JARVIS.
+
+With this option your messages, and the content of anything JARVIS reads
+for you (files, web pages, email), are sent to that service. Some services
+also need the model's private reasoning sent back with each request; JARVIS
+handles that automatically.
+
+### Free and private: a local model with Ollama
+
+1. Set `provider = "ollama"` in `settings.toml`, install Ollama from
+   <https://ollama.com/download> and let it start.
 2. Download a model that supports tool calling (about 5 GB):
 
    ```powershell
@@ -53,6 +170,10 @@ To use a different model, pull it and change `model` under `[ollama]` in
 card has the memory. Models that support tools are listed at
 <https://ollama.com/search?c=tool>.
 
+The model must fit on your graphics card. Run `ollama ps` while it is
+loaded: anything other than `100% GPU` means part of it is running on the
+processor, which is many times slower; choose a smaller model.
+
 What to expect from a small local model: it is fine for conversation and
 simple one- or two-step tasks, but it will sometimes pick the wrong tool,
 leave out an argument, or lose the thread on longer jobs. The permission
@@ -60,26 +181,6 @@ gate applies to it exactly as it does to Claude, so a mistake still cannot
 overwrite, delete or run anything without your yes. Small models are also
 easier to fool with instructions hidden in files, which is one more reason
 to read confirmation prompts before approving.
-
-### A hosted service with its own key (OpenAI-compatible)
-
-Many model services (OpenRouter, Groq, Together and others) use the OpenAI
-"chat completions" format. To use one:
-
-1. In `settings.toml` set `provider = "openai_compatible"`, then under
-   `[openai_compatible]` fill in `base_url` (from the service's API
-   documentation, ending in `/v1`) and `model`. The model must support tool
-   calling.
-2. Store the key in your Windows user environment, never in a file:
-
-   ```powershell
-   setx JARVIS_API_KEY "your-key-here"
-   ```
-
-3. Open a new terminal and start JARVIS.
-
-With this option your messages, and any file contents JARVIS reads, are sent
-to that service.
 
 ### Paid: Claude through the Anthropic API
 
@@ -93,12 +194,254 @@ setx ANTHROPIC_API_KEY "your-key-here"
 Open a new terminal so the key is picked up. This uses `claude-fable-5-2`
 and is billed per use by Anthropic.
 
+## Running
+
+| Command | What it does |
+|---|---|
+| `python -m jarvis` | Opens the desktop window |
+| `python -m jarvis web` | Same interface in your browser |
+| `python -m jarvis chat` | Chat in the terminal |
+| `python -m jarvis stop` | **Emergency stop**, from any terminal |
+| `python -m jarvis resume` | Clears the emergency stop |
+| `python -m jarvis log 50` | Shows the last 50 actions |
+| `python -m jarvis setup` | Downloads and tests the memory and speech models |
+| `python -m jarvis install-shortcut` | Adds JARVIS to the desktop and Start menu |
+| `python -m jarvis autostart on` | Starts JARVIS in the tray when you sign in |
+| `python -m jarvis connect google` | Connects an account (also `spotify`, `github`, `notion`) |
+| `python -m jarvis connections` | Shows which accounts are connected |
+| `python -m pytest` | Runs the tests |
+
+Inside the window or a chat, type `/help` for the commands:
+
+| Command | What it does |
+|---|---|
+| `/tools` | Lists the tools and the permission mode |
+| `/log 30` | Shows the last 30 actions |
+| `/memories`, `/forget 3` | Shows what is remembered; deletes one memory |
+| `/schedule`, `/unschedule 3` | Shows what is scheduled; cancels one item |
+| `/stop`, `/resume` | Engages and clears the emergency stop |
+| `/clear` | Starts a fresh conversation |
+
+Terminal chat (`python -m jarvis chat`) has no scheduler, voice or widgets;
+it is there for testing and for when the window is unavailable.
+
+## Starting JARVIS without a terminal
+
+Run this once, in a terminal in the Jarvis folder:
+
+```powershell
+.venv\Scripts\python -m jarvis install-shortcut
+```
+
+It adds a JARVIS icon to your desktop and Start menu. From then on,
+double-click it, or press the Windows key and type "Jarvis". You can pin it
+to the taskbar by right-clicking the icon.
+
+Started this way there is no terminal window. If JARVIS cannot start (for
+example the key is missing), a message box says why, and anything it would
+have printed is kept in `~/.jarvis/jarvis.log`.
+
+If you ever move the Jarvis folder, run the command again.
+
+## The window
+
+The window is laid out as a heads-up display around a central dial.
+
+- **The dial** shows what JARVIS is doing by colour and motion: cyan
+  standing by or thinking, green listening, amber waiting for your approval,
+  red stopped. The bright ring swells with the sound of your voice or its
+  own. The twelve segments around it name the groups of tools (FILES, WEB,
+  MAIL, MUSIC and so on); each lights up when JARVIS uses a tool from that
+  group, so you can see at a glance what it is touching.
+- **Left**: the date and clock (the ring fills as the day passes), processor,
+  memory, disk and battery gauges, which accounts are connected, and the
+  next scheduled item.
+- **Right**: quick-launch buttons, and the weather for your location.
+- **CONTROL** and **STOP** are at the top right, as before.
+
+When a conversation starts, the dial moves aside to make room for it. In a
+window narrower than about 1040 pixels the side widgets are hidden.
+
+The quick-launch buttons are yours to edit: see `[launcher]` in
+`settings.toml`. Each entry is a label and something to open: a folder, a
+web address, or an app's name as it appears in the Start menu. Clicking one
+opens it directly, without involving the model.
+
+Two fonts are used if present: Bahnschrift (included with Windows 10 and
+11) for the labels and Cascadia Code for monospaced text.
+
+## The control panel
+
+Click **CONTROL** at the top right of the window:
+
+- **Schedule**: reminders and scheduled tasks, with Run now and Cancel.
+- **Memory**: everything JARVIS remembers, with a Forget button on each
+  item and one to forget everything.
+- **Activity**: the action log, newest first.
+- **Accounts**: which accounts are connected, with a Disconnect button.
+  Connecting still happens in a terminal, because it needs you to paste a
+  Client ID.
+- **Settings**: the permission mode, when to answer aloud, follow-up
+  listening and the wake word. Changes apply immediately.
+
+Choices made in the panel are saved to `~/.jarvis/overrides.json` and take
+priority over `settings.toml`, which is never rewritten. Delete that file
+to return to what `settings.toml` says. JARVIS itself needs your approval
+to write to either file, so it cannot quietly loosen its own permissions
+through its file tools.
+
+## Voice
+
+Click the microphone (or press Ctrl+Space), speak, and stop talking; JARVIS
+transcribes what you said, and answers aloud when you spoke to it. Clicking
+the microphone while it is talking interrupts it. Speech recognition
+(Whisper) and the British voice (Piper) both run on your computer.
+
+Voice is installed by steps 3 and 4 of [Setup](#setup-windows): the `voice`
+extra, then `python -m jarvis setup`, which downloads the models, says a
+sentence and listens to itself to confirm both directions work.
+
+- **Python 3.15 is too new for the speech libraries.** If `pip install`
+  fails on `onnxruntime`, install Python 3.14 (`winget install
+  Python.Python.3.14`), delete the `.venv` folder, recreate it with
+  `py -3.14 -m venv .venv`, and install again.
+- **Approving actions is by click only.** Saying "yes" aloud does not
+  approve a permission prompt, so nothing overheard can authorise an action.
+- **If the voice is missing** JARVIS falls back to the voice built into
+  Windows. If recognition is missing, the microphone button is disabled.
+- Settings are under `[voice]` in `settings.toml`: recognition model,
+  voice, and when to answer aloud (`when_spoken`, `always`, `never`).
+
+### Follow-up listening
+
+After JARVIS answers a spoken request, it listens for about six seconds so
+you can reply without saying "Hey Jarvis" again. Say nothing and it goes
+back to standing by. Turn it off in the control panel, or with
+`follow_up = false` under `[voice]`.
+
+If it ever picks up its own voice or background noise as a reply, turn this
+off and tell whoever maintains the code; the pause before it starts
+listening is `400` milliseconds in `maybeFollowUp` in `index.html`.
+
+### "Hey Jarvis"
+
+Say "Hey Jarvis" followed by your request, in one
+breath or after the chime. The ear button beside the microphone turns this
+on and off, and the window remembers your choice.
+
+- While it is on, the microphone stays open and Windows shows its
+  microphone indicator. The audio goes only to JARVIS's own server on your
+  computer, is checked for the phrase and discarded. Nothing is recorded or
+  transcribed until the phrase is heard, and none of it leaves the machine.
+- It does not listen while JARVIS is speaking, working, waiting for an
+  approval, or stopped, so it cannot wake itself.
+- Each wake is written to the action log.
+- If it wakes by mistake, raise `wake_threshold` under `[voice]` in
+  `settings.toml`; if it misses you, lower it. `wake_word = false` turns
+  the feature off entirely.
+- It works while JARVIS is running, including when the window is closed
+  to the tray.
+
+## Memory
+
+JARVIS remembers across conversations. Tell it things ("my sister is called
+Layla", "I prefer short answers") and it saves them; facts that look
+relevant to a new request are passed to the model with it. It also keeps a
+record of past requests and replies, which it can search when you refer to
+something from before.
+
+| Command | What it does |
+|---|---|
+| `/memories` | Lists everything remembered |
+| `/memories sister` | Lists memories related to a word or phrase |
+| `/forget 3` | Deletes memory number 3 |
+| `/forget all` | Deletes every memory and the record of past exchanges |
+
+- Everything is in one file on your computer, `~/.jarvis/memory.db`.
+  Deleting that file also erases all memory.
+- Memories relevant to a request are sent to the model along with it. With
+  a hosted model, that means they leave your computer at that point.
+- Passwords and keys are scrubbed before saving.
+- Search is by meaning, using a small model that runs locally (about
+  65 MB, downloaded by `python -m jarvis setup`). Without it, search falls
+  back to matching words.
+- In trusted mode, saving a memory needs your approval if JARVIS has just
+  read a web page, so a page cannot plant false "facts".
+- `enabled = false` under `[memory]` in `settings.toml` turns it all off.
+
+## Reminders, scheduled tasks and the morning briefing
+
+Just ask: "remind me at six to call Layla", "every weekday at 7:30 tell me
+my first class", "every Friday at five summarise this week's email".
+
+- A **reminder** says and shows a fixed message at the time.
+- A **task** carries out a request at the time, as if you had just asked,
+  in its own conversation. The **morning briefing** is a task that comes
+  ready-made: every day at 08:00 it reads out Sharjah's weather, today's
+  calendar and a summary of unread email. Change its time by cancelling it
+  and asking for a new one, or delete it; it will not come back.
+- Results appear in the window, are spoken aloud (unless muted or speaking
+  is set to Never), and show as a Windows notification.
+- See, run or cancel everything under **CONTROL > Schedule**, or with
+  `/schedule` and `/unschedule 3`.
+
+Things to know:
+
+- **JARVIS must be running**, in the window or in the tray. Nothing fires
+  while it is closed. If it starts within a few hours of a missed item
+  (12 hours for a one-off, 3 for a repeating one), the item runs then and
+  says it is late.
+- **Unattended tasks follow the same permission rules.** If one needs your
+  approval, a card appears in the window; with no answer in two minutes,
+  the answer is no. The briefing reads email, so in trusted mode anything
+  it tried to change afterwards would need your approval.
+- **Scheduling asks first if JARVIS has just read a web page or email**, so
+  hidden instructions cannot plant a task to run later unseen.
+- **The emergency stop pauses the schedule.** Items due during a stop run
+  when it is cleared.
+- The list lives in `~/.jarvis/schedule.json`, which you can read or edit
+  while JARVIS is closed.
+
+Weather comes from Open-Meteo, a free service with no account or key.
+
+## The tray icon and starting with Windows
+
+With the tray icon, closing the window hides JARVIS instead of quitting it.
+It keeps listening for "Hey Jarvis" and keeps firing reminders. Find the
+icon by the clock (it may be under the small up-arrow). Double-click it to
+open the window; right-click for Open, Emergency stop and Quit.
+
+To have JARVIS start in the tray whenever you sign in to Windows:
+
+```powershell
+.venv\Scripts\python -m jarvis autostart on
+```
+
+`autostart off` undoes it. This is what makes an 8am briefing practical:
+JARVIS is already running when the time comes.
+
+**The microphone question.** The first time the window uses the microphone,
+Windows' browser engine may ask "wants to use your microphones". Click
+Allow once; JARVIS keeps the same address between runs and stores the
+window's settings in `~/.jarvis/webview`, so it is remembered. JARVIS also
+tries to answer that question itself so it never appears. If you are asked
+on every start, another program is probably using port 47821, which forces
+JARVIS onto a different address each time.
+
+While JARVIS sits in the tray the microphone stays open for the wake word,
+exactly as it does with the window showing. Turn the wake word off in
+**CONTROL > Settings** if you would rather it did not.
+
 ## Connecting your accounts
 
-Gmail, Google Calendar and Spotify are reached through each service's own
-interface, which is much faster and more dependable than clicking through a
-browser. Each needs a one-time setup, because Google and Spotify require
-every app, even a personal one, to be registered with them.
+Gmail, Google Calendar, Spotify, GitHub and Notion are reached through each
+service's own interface, which is much faster and more dependable than
+clicking through a browser. Each needs a one-time setup: Google and Spotify
+require every app, even a personal one, to be registered with them, and
+GitHub and Notion need an access token that you create.
+
+All of these are optional. Without them JARVIS still does everything else,
+and says which command to run if you ask for something that needs one.
 
 Sign-in tokens are stored in Windows Credential Manager (entries named
 JARVIS), never in a file. Your passwords never reach JARVIS.
@@ -215,276 +558,6 @@ will report that it lacks permission.
 JARVIS can then search your pages, read them, create new pages beneath an
 existing one, and add text to a page.
 
-## Memory
-
-JARVIS remembers across conversations. Tell it things ("my sister is called
-Layla", "I prefer short answers") and it saves them; facts that look
-relevant to a new request are passed to the model with it. It also keeps a
-record of past requests and replies, which it can search when you refer to
-something from before.
-
-| Command | What it does |
-|---|---|
-| `/memories` | Lists everything remembered |
-| `/memories sister` | Lists memories related to a word or phrase |
-| `/forget 3` | Deletes memory number 3 |
-| `/forget all` | Deletes every memory and the record of past exchanges |
-
-- Everything is in one file on your computer, `~/.jarvis/memory.db`.
-  Deleting that file also erases all memory.
-- Memories relevant to a request are sent to the model along with it. With
-  a hosted model, that means they leave your computer at that point.
-- Passwords and keys are scrubbed before saving.
-- Search is by meaning, using a small model that runs locally (about
-  65 MB, downloaded by `python -m jarvis setup`). Without it, search falls
-  back to matching words.
-- In trusted mode, saving a memory needs your approval if JARVIS has just
-  read a web page, so a page cannot plant false "facts".
-- `enabled = false` under `[memory]` in `settings.toml` turns it all off.
-
-## Voice
-
-Click the microphone (or press Ctrl+Space), speak, and stop talking; JARVIS
-transcribes what you said, and answers aloud when you spoke to it. Clicking
-the microphone while it is talking interrupts it. Speech recognition
-(Whisper) and the British voice (Piper) both run on your computer.
-
-One-time setup:
-
-```powershell
-pip install -e ".[desktop,memory,voice,dev]"
-python -m jarvis setup
-```
-
-`setup` downloads the models (about 280 MB including memory), then says a
-sentence and listens to itself to confirm both directions work.
-
-- **Python 3.15 is too new for the speech libraries.** If `pip install`
-  fails on `onnxruntime`, install Python 3.14 (`winget install
-  Python.Python.3.14`), delete the `.venv` folder, recreate it with
-  `py -3.14 -m venv .venv`, and install again.
-- **Approving actions is by click only.** Saying "yes" aloud does not
-  approve a permission prompt, so nothing overheard can authorise an action.
-- **If the voice is missing** JARVIS falls back to the voice built into
-  Windows. If recognition is missing, the microphone button is disabled.
-- Settings are under `[voice]` in `settings.toml`: recognition model,
-  voice, and when to answer aloud (`when_spoken`, `always`, `never`).
-
-### Follow-up listening
-
-After JARVIS answers a spoken request, it listens for about six seconds so
-you can reply without saying "Hey Jarvis" again. Say nothing and it goes
-back to standing by. Turn it off in the control panel, or with
-`follow_up = false` under `[voice]`.
-
-If it ever picks up its own voice or background noise as a reply, turn this
-off and tell whoever maintains the code; the pause before it starts
-listening is `400` milliseconds in `maybeFollowUp` in `index.html`.
-
-### "Hey Jarvis"
-
-With the window open, say "Hey Jarvis" followed by your request, in one
-breath or after the chime. The ear button beside the microphone turns this
-on and off, and the window remembers your choice.
-
-- While it is on, the microphone stays open and Windows shows its
-  microphone indicator. The audio goes only to JARVIS's own server on your
-  computer, is checked for the phrase and discarded. Nothing is recorded or
-  transcribed until the phrase is heard, and none of it leaves the machine.
-- It does not listen while JARVIS is speaking, working, waiting for an
-  approval, or stopped, so it cannot wake itself.
-- Each wake is written to the action log.
-- If it wakes by mistake, raise `wake_threshold` under `[voice]` in
-  `settings.toml`; if it misses you, lower it. `wake_word = false` turns
-  the feature off entirely.
-- It works only while the JARVIS window is open. Waking from the system
-  tray comes with the scheduling phase.
-
-## Starting JARVIS without a terminal
-
-Run this once, in a terminal in the Jarvis folder:
-
-```powershell
-.venv\Scripts\python -m jarvis install-shortcut
-```
-
-It adds a JARVIS icon to your desktop and Start menu. From then on,
-double-click it, or press the Windows key and type "Jarvis". You can pin it
-to the taskbar by right-clicking the icon.
-
-Started this way there is no terminal window. If JARVIS cannot start (for
-example the key is missing), a message box says why, and anything it would
-have printed is kept in `~/.jarvis/jarvis.log`.
-
-If you ever move the Jarvis folder, run the command again.
-
-## Reminders, scheduled tasks and the morning briefing
-
-Just ask: "remind me at six to call Layla", "every weekday at 7:30 tell me
-my first class", "every Friday at five summarise this week's email".
-
-- A **reminder** says and shows a fixed message at the time.
-- A **task** carries out a request at the time, as if you had just asked,
-  in its own conversation. The **morning briefing** is a task that comes
-  ready-made: every day at 08:00 it reads out Sharjah's weather, today's
-  calendar and a summary of unread email. Change its time by cancelling it
-  and asking for a new one, or delete it; it will not come back.
-- Results appear in the window, are spoken aloud (unless muted or speaking
-  is set to Never), and show as a Windows notification.
-- See, run or cancel everything under **CONTROL > Schedule**, or with
-  `/schedule` and `/unschedule 3`.
-
-Things to know:
-
-- **JARVIS must be running**, in the window or in the tray. Nothing fires
-  while it is closed. If it starts within a few hours of a missed item
-  (12 hours for a one-off, 3 for a repeating one), the item runs then and
-  says it is late.
-- **Unattended tasks follow the same permission rules.** If one needs your
-  approval, a card appears in the window; with no answer in two minutes,
-  the answer is no. The briefing reads email, so in trusted mode anything
-  it tried to change afterwards would need your approval.
-- **Scheduling asks first if JARVIS has just read a web page or email**, so
-  hidden instructions cannot plant a task to run later unseen.
-- **The emergency stop pauses the schedule.** Items due during a stop run
-  when it is cleared.
-- The list lives in `~/.jarvis/schedule.json`, which you can read or edit
-  while JARVIS is closed.
-
-Weather comes from Open-Meteo, a free service with no account or key.
-
-## The tray icon and starting with Windows
-
-With the tray icon, closing the window hides JARVIS instead of quitting it.
-It keeps listening for "Hey Jarvis" and keeps firing reminders. Find the
-icon by the clock (it may be under the small up-arrow). Double-click it to
-open the window; right-click for Open, Emergency stop and Quit.
-
-To have JARVIS start in the tray whenever you sign in to Windows:
-
-```powershell
-.venv\Scripts\python -m jarvis autostart on
-```
-
-`autostart off` undoes it. This is what makes an 8am briefing practical:
-JARVIS is already running when the time comes.
-
-**The microphone question.** The first time the window uses the microphone,
-Windows' browser engine may ask "wants to use your microphones". Click
-Allow once; JARVIS keeps the same address between runs and stores the
-window's settings in `~/.jarvis/webview`, so it is remembered. JARVIS also
-tries to answer that question itself so it never appears. If you are asked
-on every start, another program is probably using port 47821, which forces
-JARVIS onto a different address each time.
-
-While JARVIS sits in the tray the microphone stays open for the wake word,
-exactly as it does with the window showing. Turn the wake word off in
-**CONTROL > Settings** if you would rather it did not.
-
-## The window
-
-The window is laid out as a heads-up display around a central dial.
-
-- **The dial** shows what JARVIS is doing by colour and motion: cyan
-  standing by or thinking, green listening, amber waiting for your approval,
-  red stopped. The bright ring swells with the sound of your voice or its
-  own. The twelve segments around it name the groups of tools (FILES, WEB,
-  MAIL, MUSIC and so on); each lights up when JARVIS uses a tool from that
-  group, so you can see at a glance what it is touching.
-- **Left**: the date and clock (the ring fills as the day passes), processor,
-  memory, disk and battery gauges, which accounts are connected, and the
-  next scheduled item.
-- **Right**: quick-launch buttons, and the weather for your location.
-- **CONTROL** and **STOP** are at the top right, as before.
-
-When a conversation starts, the dial moves aside to make room for it. In a
-window narrower than about 1040 pixels the side widgets are hidden.
-
-The quick-launch buttons are yours to edit: see `[launcher]` in
-`settings.toml`. Each entry is a label and something to open: a folder, a
-web address, or an app's name as it appears in the Start menu. Clicking one
-opens it directly, without involving the model.
-
-Two fonts are used if present: Bahnschrift (included with Windows 10 and
-11) for the labels and Cascadia Code for monospaced text.
-
-## The control panel
-
-Click **CONTROL** at the top right of the window:
-
-- **Schedule**: reminders and scheduled tasks, with Run now and Cancel.
-- **Memory**: everything JARVIS remembers, with a Forget button on each
-  item and one to forget everything.
-- **Activity**: the action log, newest first.
-- **Accounts**: which accounts are connected, with a Disconnect button.
-  Connecting still happens in a terminal, because it needs you to paste a
-  Client ID.
-- **Settings**: the permission mode, when to answer aloud, follow-up
-  listening and the wake word. Changes apply immediately.
-
-Choices made in the panel are saved to `~/.jarvis/overrides.json` and take
-priority over `settings.toml`, which is never rewritten. Delete that file
-to return to what `settings.toml` says. JARVIS itself needs your approval
-to write to either file, so it cannot quietly loosen its own permissions
-through its file tools.
-
-## Running
-
-| Command | What it does |
-|---|---|
-| `python -m jarvis` | Opens the desktop window |
-| `python -m jarvis web` | Same interface in your browser |
-| `python -m jarvis chat` | Chat in the terminal |
-| `python -m jarvis stop` | **Emergency stop**, from any terminal |
-| `python -m jarvis resume` | Clears the emergency stop |
-| `python -m jarvis log 50` | Shows the last 50 actions |
-| `python -m jarvis setup` | Downloads and tests the memory and speech models |
-| `python -m jarvis install-shortcut` | Adds JARVIS to the desktop and Start menu |
-| `python -m jarvis autostart on` | Starts JARVIS in the tray when you sign in |
-| `python -m pytest` | Runs the tests |
-
-Inside a chat, type `/help` for commands: `/tools`, `/log`, `/stop`,
-`/resume`, `/clear`, `/quit`.
-
-## What JARVIS can do
-
-| Area | Tools |
-|---|---|
-| Files | read, list, search, write, move, delete |
-| Documents | read PDF, Word, PowerPoint and Excel files |
-| Commands and code | run PowerShell commands; write and run Python in the workspace |
-| Web | search the web, read a page's text, open a page in your browser |
-| Screen | list open windows, read what is in a window, open apps |
-| Mouse and keyboard | click, type, press key combinations |
-| Memory | remember, recall, forget |
-| Gmail | search, read, send, draft |
-| Google Calendar | list, add and delete events |
-| Spotify | play, queue, pause, skip, volume, what's playing |
-| GitHub | repositories, issues, pull requests, files, notifications; open issues, comment |
-| Notion | search, read, create and add to pages |
-| Schedule | reminders, recurring tasks, the morning briefing |
-| Weather | current conditions and a three-day forecast |
-
-**How it "sees" the screen.** The current model reads text only, so JARVIS
-does not look at screenshots. It asks Windows what each window contains
-(titles, buttons, menus, text fields and their contents), the same way a
-screen reader does. That works well for ordinary apps and browsers. Apps
-that draw their own interface, such as games, video and images, expose
-little or nothing.
-
-**Documents.** `read_document` extracts the text of `.pdf`, `.docx`,
-`.pptx` (including speaker notes) and `.xlsx` files, so you can ask for a
-summary of a lecture, a quiz on a chapter, or the deadlines in a syllabus.
-Long documents are read in parts. Two limits: a scanned PDF is pictures of
-pages and has no text to read, and the old `.doc`, `.ppt` and `.xls`
-formats are not supported (save them as the modern format first).
-
-**Web search** uses free public search engines through the `ddgs` library,
-with no account or key. They sometimes rate-limit; if a search fails, wait a
-minute. Pages that need a login or build their content with scripts may
-come back nearly empty; for those, JARVIS can open the page in your browser
-and read it from the screen instead.
-
 ## Permissions
 
 Every tool call goes through one gate (`jarvis/core/permissions.py`) before
@@ -496,7 +569,7 @@ without asking:
 | Mode | Runs without asking | Asks first |
 |---|---|---|
 | `careful` | Reading; new files in the workspace | Everything else |
-| `trusted` (default) | Commands, code, files anywhere, opening apps, clicking and typing | Deleting; sending (once email and messaging exist); and see "after reading the web" below |
+| `trusted` (default) | Commands, code, files anywhere, opening apps, clicking and typing | Deleting; sending email, invitations and public posts; and see "after reading the web" below |
 | `unrestricted` | Everything | Nothing |
 
 In every mode:
@@ -537,9 +610,10 @@ mechanical backstop.
 
 ### Emergency stop
 
-The Stop button, `/stop`, or `python -m jarvis stop` in any terminal. It
+The STOP button, `/stop`, "Emergency stop" in the tray icon's menu, or
+`python -m jarvis stop` in any terminal. It
 halts the current request, kills any command JARVIS started, and refuses all
-further work until `/resume`. The command-line form works by creating
+further work, including scheduled items, until `/resume`. The command-line form works by creating
 `~/.jarvis/STOP`, so it works even if the window has frozen. In terminal
 chat, Ctrl+C interrupts the current task without engaging the stop.
 
@@ -549,6 +623,21 @@ Everything JARVIS does is appended to `~/.jarvis/actions.jsonl`: each
 message you send, each tool call with its arguments, the tier, whether it
 ran automatically, was approved, denied or blocked, and the result. API keys
 and anything that looks like a password or token are removed before writing.
+
+## What leaves your computer
+
+- **To the model provider** (unless you use Ollama): what you say or type,
+  the content of whatever JARVIS reads for you (files, documents, web pages,
+  email, calendar, what is on screen), memories relevant to the request,
+  and the results of its tools.
+- **To the services you connect**: only the requests needed to do what you
+  asked (Google, Spotify, GitHub, Notion).
+- **To public services, without an account**: web searches go to public
+  search engines, and the weather widget and tool ask Open-Meteo about your
+  configured location.
+- **Staying on your computer**: speech recognition, the speaking voice, the
+  wake word, memory search, the action log, and all stored files. Audio is
+  never sent anywhere.
 
 ## How it is organised
 
@@ -574,14 +663,17 @@ jarvis/
   integrations/      sign-in for Google and Spotify (oauth.py), GitHub and
                      Notion (tokens.py)
   tools/             one file per group of tools: files, shell, code, web,
-                     documents, desktop, memory, google, spotify
+                     documents, desktop, memory, schedule, weather, google,
+                     spotify, github, notion
   ui/
     terminal.py      terminal chat
     server.py        local server behind the window
     desktop.py       the window itself
     shortcut.py      the desktop and Start menu shortcut
-    web/index.html   the interface
-tests/
+    web/index.html   the interface (one file: markup, styles and script)
+    web/jarvis.ico   the icon
+docs/screenshot.png  the picture at the top of this file
+tests/               one file per area; no test needs the network or an account
 ```
 
 ### Adding a tool
@@ -600,42 +692,61 @@ from jarvis.core.tools import tool
         "required": ["name"],
         "additionalProperties": False,
     },
-    tier="auto",      # auto | confirm | blocked; omit to use the default (confirm)
+    kind="read",      # what sort of action it is: read, launch, write,
+                      # execute, control, delete or send. The permission
+                      # mode decides how each kind is treated.
+    tier="auto",      # used in "careful" mode: auto | confirm | blocked
     read_only=True,   # True only if it changes nothing
 )
 def say_hello(args, ctx):
     return f"Hello, {args['name']}."
 ```
 
-Restart JARVIS and it is available. Optional extras on `@tool`:
+Restart JARVIS and it is available. If you leave `kind` out, the tool always
+asks before running, whatever the mode. Optional extras on `@tool`:
 `escalate` (raise the tier for risky calls), `describe` (the text shown when
 asking permission), `blockable_text` (text checked against blocked patterns).
-`jarvis/tools/files.py` uses all three.
+`jarvis/tools/files.py` uses all three. To have a dial segment light up
+for it, add its name to `segmentFor` in `index.html`.
 
 ## Decisions you may need to understand
 
-- **Two brains, one loop.** `brains.py` holds both backends. The history is
-  kept in Anthropic's message format and translated for Ollama on each
-  request, so everything else (permissions, logging, tools) is shared.
-- **The API key** is read from `ANTHROPIC_API_KEY` by the Anthropic library.
-  JARVIS never stores it, and the log scrubs it.
+- **Three brains, one loop.** `brains.py` holds the three backends. The
+  history is kept in Anthropic's message format and translated for the
+  other two on each request, so everything else (permissions, logging,
+  tools) is shared.
+- **Keys are never in files.** Model keys are read from environment
+  variables (`JARVIS_API_KEY`, `ANTHROPIC_API_KEY`); account tokens are in
+  Windows Credential Manager. The log scrubs anything that looks like one.
 - **The conversation history is append-only.** The model verifies that
   earlier turns were not edited, so the code only ever adds to
   `Jarvis.messages`. To start over, use `/clear`.
-- **The system prompt never changes between requests** (the current time is
-  added to your message instead). This lets Anthropic cache it, which makes
-  replies cheaper and faster. Avoid putting changing values in `persona.py`.
-- **`effort`** in `settings.toml` controls how hard the model thinks.
-  "medium" is the default; raise it to "high" for difficult work.
-- **`refusal_fallback`**: if the model's safety filter declines a request,
-  Anthropic retries it on another of its models. Turn it off to see the
-  refusal instead.
+- **The system prompt never changes between requests** (the current time
+  and any relevant memories are added to your message instead). This lets
+  the provider cache it, which makes replies cheaper and faster. Avoid
+  putting changing values in `persona.py`.
+- **`effort` and `refusal_fallback`** in `settings.toml` apply to the
+  `anthropic` provider only. `effort` controls how hard the model thinks.
+  With `refusal_fallback` on, if the model's safety filter declines a
+  request, Anthropic retries it on another of its models.
 - **The "sandbox" is a folder, not a virtual machine.** Scripts run in
   `~/.jarvis/workspace` with a timeout, but with your user account's full
-  rights. That is why running code asks first.
+  rights. In `careful` mode running code asks first; in `trusted` mode it
+  does not, so choose the mode with that in mind.
 - **The window is a local web page.** The server listens only on
-  `127.0.0.1` and requires a random token plus a matching origin, so other
-  programs and web pages cannot send JARVIS commands.
+  `127.0.0.1` (port 47821 when free) and requires a random token, new on
+  every start, plus a matching origin, so other programs and web pages
+  cannot send JARVIS commands.
+- **Scheduled tasks run in their own conversation**, with the same
+  permission rules, and are refused anything needing approval if you do not
+  answer within two minutes.
+- **Settings have two layers.** `settings.toml` is the base; choices made in
+  the control panel are saved to `~/.jarvis/overrides.json` and win.
+- **Where things are kept.** Everything JARVIS stores is under `~/.jarvis`:
+  `actions.jsonl` (the log), `memory.db`, `schedule.json`, `overrides.json`,
+  `jarvis.log`, `models/`, `webview/` and `workspace/`. Deleting that folder
+  resets JARVIS completely; account tokens are separate, in Credential
+  Manager.
 
 ## Roadmap
 

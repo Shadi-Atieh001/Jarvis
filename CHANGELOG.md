@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.11.2 — Documentation (2026-11-12)
+
+Changed
+- README brought up to date and reordered for a first-time reader: a
+  screenshot, a contents list, corrected setup steps (Python 3.14, the
+  optional extras, `setup`, `install-shortcut`), the three model providers
+  with the hosted one as the default, the full command lists, a "What
+  leaves your computer" section, and where JARVIS keeps its files.
+- Removed statements that described finished features as still to come.
+
 ## 0.11.1 — Stop asking for the microphone on every start (2026-11-12)
 
 Fixed
