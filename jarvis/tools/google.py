@@ -16,6 +16,7 @@ from email.utils import parseaddr
 
 from jarvis.core.tools import AUTO, CONFIRM, ToolContext, ToolResult, tool
 from jarvis.integrations import oauth
+from jarvis.core.secrets import SecretsUnavailable
 from jarvis.integrations.oauth import GOOGLE, ApiError, NotConnected
 from jarvis.tools.web import page_text
 
@@ -30,7 +31,7 @@ def _guard(func):
     def wrapper(args: dict, ctx: ToolContext):
         try:
             return func(args, ctx)
-        except (NotConnected, ApiError) as exc:
+        except (NotConnected, ApiError, SecretsUnavailable) as exc:
             return ToolResult(str(exc), is_error=True)
 
     wrapper.__name__ = func.__name__
@@ -220,7 +221,7 @@ def _describe_email(action: str):
     def describe(args: dict, ctx: ToolContext) -> str:
         try:
             return f"{action}:\n\n{_build_email(args)[1]}"
-        except (ValueError, NotConnected, ApiError) as exc:
+        except (ValueError, NotConnected, ApiError, SecretsUnavailable) as exc:
             return f"{action} (cannot be prepared: {exc})"
 
     return describe

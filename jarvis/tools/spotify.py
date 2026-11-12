@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from jarvis.core.tools import AUTO, ToolContext, ToolResult, tool
 from jarvis.integrations import oauth
+from jarvis.core.secrets import SecretsUnavailable
 from jarvis.integrations.oauth import SPOTIFY, ApiError, NotConnected
 
 API = "https://api.spotify.com/v1"
@@ -19,7 +20,7 @@ def _guard(func):
     def wrapper(args: dict, ctx: ToolContext):
         try:
             return func(args, ctx)
-        except NotConnected as exc:
+        except (NotConnected, SecretsUnavailable) as exc:
             return ToolResult(str(exc), is_error=True)
         except ApiError as exc:
             if exc.status == 403:

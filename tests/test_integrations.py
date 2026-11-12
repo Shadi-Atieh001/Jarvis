@@ -348,3 +348,19 @@ def test_an_expired_sign_in_asks_to_reconnect(registry, ctx, keychain, monkeypat
     monkeypatch.setattr(oauth, "_http", lambda *a, **k: (400, b'{"error": "invalid_grant"}'))
     r = run(registry, ctx, "spotify_now_playing")
     assert r.is_error and "expired" in r.text and "connect spotify" in r.text
+
+
+def test_a_missing_keychain_is_reported_not_crashed(registry, ctx, monkeypatch):
+    import keyring
+    import keyring.errors
+
+    def broken(*args):
+        raise keyring.errors.NoKeyringError("no backend")
+
+    monkeypatch.setattr(keyring, "get_password", broken)
+    monkeypatch.setattr(oauth, "_access", {})
+    out = []
+    assert cli.run("connections", [], out=out.append) == 1 and "keychain" in out[0]
+    r = run(registry, ctx, "gmail_search")
+    assert r.is_error and "keychain" in r.text
+    assert run(registry, ctx, "spotify_now_playing").is_error

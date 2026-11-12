@@ -21,17 +21,28 @@ def _keyring():
     return keyring
 
 
+def _guarded(action):
+    """Run a keychain operation, turning its failures into one clear error."""
+    keyring = _keyring()
+    try:
+        return action(keyring)
+    except keyring.errors.KeyringError as exc:
+        raise SecretsUnavailable(
+            f"This computer's keychain could not be used ({type(exc).__name__}). "
+            "On Windows, check that Credential Manager is available to your account."
+        ) from None
+
+
 def get(name: str) -> str | None:
-    return _keyring().get_password(SERVICE, name)
+    return _guarded(lambda k: k.get_password(SERVICE, name))
 
 
 def put(name: str, value: str) -> None:
-    _keyring().set_password(SERVICE, name, value)
+    _guarded(lambda k: k.set_password(SERVICE, name, value))
 
 
 def delete(name: str) -> None:
-    keyring = _keyring()
     try:
-        keyring.delete_password(SERVICE, name)
-    except Exception:
-        pass  # it was not there
+        _guarded(lambda k: k.delete_password(SERVICE, name))
+    except SecretsUnavailable:
+        pass  # it was not there, or there is no keychain to delete from
