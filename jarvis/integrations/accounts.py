@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from jarvis.integrations import oauth, tokens
 
-ACCOUNTS = {a.key: a for a in (oauth.GOOGLE, oauth.SPOTIFY, tokens.GITHUB, tokens.NOTION)}
+GEMINI = tokens.TokenAccount("gemini", "Gemini")  # JARVIS's eyes; see tools/sight.py
+ACCOUNTS = {a.key: a for a in (oauth.GOOGLE, oauth.SPOTIFY, tokens.GITHUB, tokens.NOTION, GEMINI)}
 
 
 def is_connected(account) -> bool:

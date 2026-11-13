@@ -43,7 +43,7 @@
   .readout b { font: 500 12px/1 var(--mono); color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* CONTROL and STOP: angled HUD keys */
   .hud-btn {
-    font: 700 12px/1 var(--hud); letter-spacing: .3em; padding: 11px 22px 11px 26px; border: 0; position: relative;
+    font: 700 12px/1 var(--hud); letter-spacing: .3em; text-transform: uppercase; padding: 11px 22px 11px 26px; border: 0; position: relative;
     color: var(--accent); background: rgba(0, 229, 255, .10);
     clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
     box-shadow: inset 0 0 0 1px var(--line-strong), inset 0 0 18px rgba(0, 229, 255, .18);
@@ -141,8 +141,9 @@
   #mic.live svg { stroke: var(--ok); }
   #mic:disabled, #wake:disabled { opacity: .35; cursor: not-allowed; }
   #mute.off svg, #wake svg { stroke: var(--muted); }
-  #wake.on { border-color: var(--accent); box-shadow: 0 0 20px rgba(0, 229, 255, .45); }
-  #wake.on svg { stroke: var(--accent); }
+  #wake.on, #eye.on { border-color: var(--accent); box-shadow: 0 0 20px rgba(0, 229, 255, .45); }
+  #wake.on svg, #eye.on svg { stroke: var(--accent); }
+  #eye svg { stroke: var(--muted); }
   .hint { font: 600 10px/1.4 var(--hud); letter-spacing: .2em; text-transform: uppercase; color: var(--muted); text-align: center; margin-top: 6px; }
   body.talking .hint { display: none; }
   .talk { flex: 1; align-self: stretch; display: flex; flex-direction: column; min-height: 0; margin-top: 6px; }
@@ -218,6 +219,21 @@
     color: var(--accent); border: 1px solid var(--line-strong); border-radius: 2px;
   }
   .ghost:hover { background: rgba(79, 216, 255, .14); }
+  #setup { position: fixed; inset: 0; z-index: 20; background: rgba(0, 4, 8, .9); display: grid; place-items: center; overflow-y: auto; padding: 24px 16px; }
+  #setup[hidden] { display: none; }
+  #setup form { width: min(560px, 100%); background: #050d14; padding: 24px 26px; box-shadow: inset 0 0 0 1px var(--line-strong), 0 0 60px rgba(0, 229, 255, .15); clip-path: polygon(18px 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%, 0 18px); }
+  #setup h2 { margin: 0 0 6px; font: 600 16px/1.2 var(--hud); letter-spacing: .3em; text-transform: uppercase; color: var(--accent); }
+  #setup p { margin: 0 0 16px; color: var(--muted); font-size: 13px; }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font: 600 11px/1.3 var(--hud); letter-spacing: .14em; text-transform: uppercase; color: var(--text); margin-bottom: 6px; }
+  .field input, .field select { width: 100%; font: 14px var(--sans); color: var(--text); background: #000508; border: 1px solid var(--line-strong); border-radius: 2px; padding: 9px 10px; }
+  .field input:focus-visible, .field select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .field small { display: block; color: var(--muted); font-size: 12px; margin-top: 4px; }
+  #setup-error { color: var(--warn); white-space: pre-wrap; overflow-wrap: anywhere; min-height: 1em; }
+  .setup-actions { display: flex; justify-content: flex-end; align-items: center; gap: 12px; }
+  .connect-form { margin-top: 8px; display: grid; gap: 6px; }
+  .connect-form input { width: 100%; font: 13px var(--mono); color: var(--text); background: #000508; border: 1px solid var(--line-strong); border-radius: 2px; padding: 7px 8px; }
+  .connect-form .note { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
   #scrim { position: fixed; inset: 0; background: rgba(0, 4, 8, .55); z-index: 9; }
   #panel {
     position: fixed; top: 0; right: 0; bottom: 0; width: min(520px, 100vw); z-index: 10;
@@ -339,6 +355,9 @@
       <button id="mic" class="round" title="Talk to JARVIS (Ctrl+Space)" aria-label="Talk to JARVIS" disabled>
         <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/></svg>
       </button>
+      <button id="eye" class="round small" title="Sight: let JARVIS look at your screen when you ask" aria-label="Sight" aria-pressed="false">
+        <svg viewBox="0 0 24 24"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.8"/></svg>
+      </button>
       <button id="wake" class="round small" title="Listen for &quot;Hey Jarvis&quot;" aria-label="Listen for Hey Jarvis" aria-pressed="false" disabled>
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2"/><path d="M8 8a5.7 5.7 0 0 0 0 8M16 8a5.7 5.7 0 0 1 0 8M5 5a10 10 0 0 0 0 14M19 5a10 10 0 0 1 0 14"/></svg>
       </button>
@@ -375,6 +394,49 @@
     </section>
   </aside>
 </main>
+
+<div id="setup" role="dialog" aria-label="Set up JARVIS" hidden>
+  <form id="setup-form" autocomplete="off">
+    <h2>Set up JARVIS</h2>
+    <p id="setup-intro">A few details and JARVIS is ready. You can change any of this later under CONTROL &gt; Settings.</p>
+    <div class="field"><label for="s-address">What should JARVIS call you?</label><input id="s-address" maxlength="40" placeholder="Sir, Ma'am, or your name"></div>
+    <div class="field"><label for="s-location">Your city, for weather and local time</label><input id="s-location" maxlength="80" placeholder="e.g. Sharjah"></div>
+    <div class="field">
+      <label for="s-provider">Which model should JARVIS think with?</label>
+      <select id="s-provider">
+        <option value="openai_compatible">A hosted service with an API key (IFM and most others)</option>
+        <option value="ollama">Ollama, running on this computer (free and private)</option>
+        <option value="anthropic">Claude, from Anthropic (paid)</option>
+      </select>
+    </div>
+    <div class="for-openai_compatible">
+      <div class="field"><label for="s-base">Service address</label><input id="s-base" placeholder="https://api.example.com/v1"><small>From the service's API documentation; it usually ends in /v1.</small></div>
+      <div class="field"><label for="s-model">Model name</label><input id="s-model" placeholder="the model's name on that service"><small>It must support tool (function) calling.</small></div>
+    </div>
+    <div class="for-ollama">
+      <div class="field"><label for="s-ollama">Ollama model</label><input id="s-ollama" placeholder="qwen3:8b"><small>Install Ollama from ollama.com, then run: ollama pull qwen3:8b</small></div>
+    </div>
+    <div class="for-anthropic">
+      <div class="field"><label for="s-claude">Claude model</label><input id="s-claude" placeholder="claude-fable-5-2"></div>
+    </div>
+    <div class="for-openai_compatible for-anthropic">
+      <div class="field"><label for="s-key">API key</label><input id="s-key" type="password" placeholder="leave empty to keep the key already stored"><small>Stored in Windows Credential Manager, never in a file.</small></div>
+    </div>
+    <div class="field">
+      <label for="s-mode">How much may JARVIS do without asking?</label>
+      <select id="s-mode">
+        <option value="careful">Careful: asks before changing, deleting or running anything (recommended to start)</option>
+        <option value="trusted">Trusted: asks only before deleting or sending</option>
+        <option value="unrestricted">Unrestricted: never asks</option>
+      </select>
+    </div>
+    <p id="setup-error" role="alert"></p>
+    <div class="setup-actions">
+      <button type="button" id="setup-cancel" class="small-btn">Cancel</button>
+      <button type="submit" id="setup-save" class="hud-btn">Save and check</button>
+    </div>
+  </form>
+</div>
 
 <div id="scrim" hidden></div>
 <aside id="panel" role="dialog" aria-label="Control panel" hidden>
@@ -876,6 +938,21 @@ function toWav(chunks, rate) {
 
 micBtn.onclick = () => recorder.toggle();
 wakeBtn.onclick = () => wake.toggle();
+// Sight: whether JARVIS may look at the screen when asked. Off means off:
+// the server refuses the look, whatever the model wants.
+function paintEye() {
+  $("eye").classList.toggle("on", !!info.sight);
+  $("eye").setAttribute("aria-pressed", String(!!info.sight));
+  $("eye").title = info.sight ? "Sight is on: JARVIS may look at your screen when you ask. Click to switch off." : "Sight is off: JARVIS cannot look at your screen. Click to switch on.";
+}
+$("eye").onclick = async () => {
+  const value = !info.sight;
+  try {
+    await api("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "sight", value }) });
+    info.sight = value; paintEye();
+    caption(value ? "Sight on. I shall look only when you ask." : "Sight off. I cannot see your screen.");
+  } catch (err) { caption("Could not change sight: " + err.message); }
+};
 document.addEventListener("keydown", (e) => {
   if (e.ctrlKey && e.code === "Space" && !micBtn.disabled) { e.preventDefault(); recorder.toggle(); }
 });
@@ -886,6 +963,51 @@ muteBtn.onclick = () => {
   $("mute-waves").style.display = muted ? "none" : "";
   if (muted) speech.stop();
 };
+
+/* ------------------------------------------------------------ setup */
+// Shown by itself the first time (when no model is configured), and from
+// CONTROL > Settings whenever you want to change your name, city or model.
+const setup = {
+  first: false,
+  fields: { address_as: "s-address", location: "s-location", provider: "s-provider", base_url: "s-base", model: "s-model", ollama_model: "s-ollama", claude_model: "s-claude", permission_mode: "s-mode" },
+  show(state, first) {
+    this.first = first;
+    for (const [key, id] of Object.entries(this.fields)) $(id).value = state.profile[key] || "";
+    if (first) $("s-mode").value = "careful";  // a new installation starts cautious
+    $("s-key").value = "";
+    $("setup-intro").textContent = first
+      ? "A few details and JARVIS is ready. You can change any of this later under CONTROL > Settings."
+      : "Change who JARVIS is talking to, or which model it uses.";
+    $("setup-error").textContent = first && state.problem ? "" : "";
+    $("setup-cancel").hidden = first;
+    this.paint();
+    $("setup").hidden = false;
+    $("s-address").focus();
+  },
+  paint() {
+    const provider = $("s-provider").value;
+    document.querySelectorAll('#setup [class*="for-"]').forEach((block) => { block.hidden = !block.classList.contains("for-" + provider); });
+  },
+  async save(event) {
+    event.preventDefault();
+    const body = { key: $("s-key").value };
+    for (const [key, id] of Object.entries(this.fields)) body[key] = $(id).value.trim();
+    $("setup-save").disabled = true; $("setup-save").textContent = "Checking…"; $("setup-error").textContent = "";
+    try {
+      const state = await (await api("/api/setup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).json();
+      if (state.needed) { $("setup-error").textContent = "Not working yet: " + state.problem; return; }
+      location.reload();  // start again with the new name, city and model
+    } catch (err) {
+      $("setup-error").textContent = "Could not save: " + err.message;
+    } finally {
+      $("setup-save").disabled = false; $("setup-save").textContent = "Save and check";
+    }
+  },
+};
+$("s-provider").onchange = () => setup.paint();
+$("setup-form").onsubmit = (e) => setup.save(e);
+$("setup-cancel").onclick = () => { $("setup").hidden = true; };
+api("/api/setup").then((r) => r.json()).then((state) => { if (state.needed) setup.show(state, true); }).catch(() => {});
 
 /* ---------------------------------------------------- control panel */
 const panel = {
@@ -995,8 +1117,38 @@ const panel = {
         };
         row.append(el("span", "tag good", "Connected"), text, off);
       } else {
-        text.appendChild(el("small", "", "To connect, run this in a terminal in the Jarvis folder:"));
-        text.appendChild(el("code", "cmd", `.venv\\Scripts\\python -m jarvis connect ${c.key}`));
+        const HELP = {
+          google: ["Needs a Google OAuth client of type \"Desktop app\" (see the README, \"Connecting Google\").", ["client_id", "client_secret"]],
+          spotify: ["Needs a Spotify developer app whose Redirect URI is http://127.0.0.1:8899/callback (see the README).", ["client_id"]],
+          github: ["Needs a personal access token from github.com/settings/personal-access-tokens.", ["token"]],
+          notion: ["Needs an internal integration secret from notion.so/profile/integrations.", ["token"]],
+          gemini: ["Gives JARVIS sight. Needs a free API key from aistudio.google.com/apikey.", ["token"]],
+        }[c.key] || ["", ["token"]];
+        const LABEL = { client_id: "Client ID", client_secret: "Client secret", token: "Token or key" };
+        const form = el("form", "connect-form");
+        form.appendChild(el("div", "note", HELP[0]));
+        const inputs = {};
+        for (const field of HELP[1]) {
+          const input = el("input");
+          input.placeholder = LABEL[field]; input.setAttribute("aria-label", LABEL[field]); input.autocomplete = "off";
+          if (field !== "client_id") input.type = "password";
+          inputs[field] = input; form.appendChild(input);
+        }
+        const go = el("button", "small-btn", "Connect"), note = el("div", "note");
+        go.type = "submit";
+        form.append(go, note);
+        form.onsubmit = async (event) => {
+          event.preventDefault();
+          const body = {};
+          for (const [field, input] of Object.entries(inputs)) body[field] = input.value.trim();
+          go.disabled = true;
+          note.textContent = HELP[1].includes("client_id") ? "Your browser is opening. Approve the request there…" : "Checking…";
+          try {
+            await api(`/api/connections/${c.key}/connect`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+            this.show("accounts"); refreshWidgets();
+          } catch (err) { note.textContent = "That did not work: " + err.message; go.disabled = false; }
+        };
+        text.appendChild(form);
         row.append(el("span", "tag", "Not connected"), text);
       }
       out.push(row);
@@ -1057,6 +1209,7 @@ const panel = {
           await api("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key, value }) });
           info[key] = value;
           if (key === "permission_mode") $("r-mode").textContent = String(value).toUpperCase();
+          if (key === "sight") paintEye();
           if (key === "wake_word") { try { localStorage.removeItem("jarvis.wake"); } catch (_) {} value ? wake.enable() : wake.disable(); }
           this.show("settings");
         };
@@ -1077,10 +1230,18 @@ const panel = {
       [true, "On", "After a spoken answer it listens for a few seconds, so you can reply without the wake word."],
       [false, "Off", "Every request needs the wake word or the microphone button."],
     ]);
+    group("Sight", "sight", [
+      [true, "On", "When you ask, JARVIS takes one picture of your screen and sends it to Google Gemini to describe. It never looks unasked."],
+      [false, "Off", "JARVIS cannot look at your screen at all."],
+    ]);
     group('Listen for "Hey Jarvis"', "wake_word", [
       [true, "On", "The microphone stays open; audio is checked on this computer and discarded."],
       [false, "Off", "The microphone is used only when you press the button."],
     ]);
+    out.push(el("div", "label setting-title", "Name, city and model"));
+    const again = el("button", "small-btn", "Change name, city or model…");
+    again.onclick = async () => { this.close(); setup.show(await this.json("/api/setup"), false); };
+    out.push(again);
     out.push(el("div", "label setting-title", "Everything else"));
     out.push(el("p", "", "The model, the voice, the blocked list and other options are in settings.toml in the Jarvis folder. Choices made here are saved separately and take priority."));
     return out;
@@ -1113,7 +1274,7 @@ function segmentFor(tool) {
   if (/^schedule_|^weather$/.test(tool)) return 11;
   if (/^(remember|recall|forget)$/.test(tool)) return 5;
   if (/^(web_search|read_page|open_url)$/.test(tool)) return 3;
-  if (/^(list_windows|read_screen|open_app|focus_window|click|type_text|press_keys)$/.test(tool)) return 4;
+  if (/^(list_windows|read_screen|look_at_screen|open_app|focus_window|click|type_text|press_keys)$/.test(tool)) return 4;
   if (tool === "run_command") return 1;
   if (tool === "run_python") return 2;
   return 0;
@@ -1299,6 +1460,7 @@ api("/api/info").then((r) => r.json()).then((data) => {
   info = data;
   $("r-model").textContent = data.model || data.provider;
   $("r-mode").textContent = (data.permission_mode || "").toUpperCase();
+  paintEye();
   const v = data.voice;
   $("r-voice").textContent = v.listen && v.speak ? "READY" : v.listen ? "LISTEN ONLY" : "NOT SET UP";
   micBtn.disabled = !v.listen;

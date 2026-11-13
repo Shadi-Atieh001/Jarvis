@@ -40,6 +40,8 @@ class Settings:
     whisper_model: str = "base.en"
     piper_voice: str = "en_GB-alan-medium"
     speak_replies: str = "when_spoken"  # when_spoken | always | never
+    sight: bool = True  # may JARVIS look at the screen when asked?
+    sight_model: str = "gemini-3.5-flash-lite"
     follow_up: bool = True
     wake_word: bool = True
     wake_threshold: float = 0.5
@@ -113,6 +115,9 @@ def load_settings(path: Path | None = None) -> Settings:
     s.whisper_model = voice.get("whisper_model", s.whisper_model)
     s.piper_voice = voice.get("piper_voice", s.piper_voice)
     s.speak_replies = voice.get("speak_replies", s.speak_replies)
+    sight = data.get("sight", {})
+    s.sight = sight.get("enabled", s.sight)
+    s.sight_model = sight.get("model", s.sight_model)
     s.follow_up = voice.get("follow_up", s.follow_up)
     s.wake_word = voice.get("wake_word", s.wake_word)
     s.wake_threshold = voice.get("wake_threshold", s.wake_threshold)
@@ -146,7 +151,46 @@ ADJUSTABLE = {
     "speak_replies": ("when_spoken", "always", "never"),
     "wake_word": (True, False),
     "follow_up": (True, False),
+    "sight": (True, False),
 }
+
+
+# What the setup screen can change: who you are and which model to use.
+# Maps the name used in overrides.json to the Settings field.
+PROFILE = {
+    "address_as": "address_as",
+    "location": "location",
+    "provider": "provider",
+    "base_url": "compat_base_url",
+    "model": "compat_model",
+    "ollama_model": "ollama_model",
+    "claude_model": "model",
+}
+PROVIDERS = ("openai_compatible", "ollama", "anthropic")
+
+
+def _valid_profile_value(key: str, value) -> bool:
+    if not isinstance(value, str) or not value.strip() or len(value) > 300 or "\n" in value:
+        return False
+    return value in PROVIDERS if key == "provider" else True
+
+
+def save_profile(s: Settings, values: dict) -> None:
+    """Apply and remember the setup screen's answers."""
+    import json
+
+    clean = {k: v.strip() for k, v in values.items() if k in PROFILE and _valid_profile_value(k, v)}
+    path = overrides_path(s)
+    try:
+        saved = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(saved, dict):
+            saved = {}
+    except (OSError, ValueError):
+        saved = {}
+    saved.update(clean)
+    path.write_text(json.dumps(saved, indent=2), encoding="utf-8")
+    for key, value in clean.items():
+        setattr(s, PROFILE[key], value)
 
 
 def overrides_path(s: Settings) -> Path:
@@ -163,6 +207,8 @@ def apply_overrides(s: Settings) -> None:
     for key, value in saved.items() if isinstance(saved, dict) else []:
         if key in ADJUSTABLE and value in ADJUSTABLE[key]:
             setattr(s, key, value)
+        elif key in PROFILE and _valid_profile_value(key, value):
+            setattr(s, PROFILE[key], value.strip())
 
 
 def save_override(s: Settings, key: str, value) -> None:

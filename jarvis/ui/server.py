@@ -204,6 +204,102 @@ def create_app(jarvis: Jarvis, token: str | None = None, make_agent=None) -> Fas
             raise HTTPException(status_code=400, detail=detail or "Could not open it.")
         return {"ok": True}
 
+    # ---- first-run setup: who you are and which model to use
+
+    def setup_state() -> dict:
+        from jarvis.app import startup_problem
+
+        s = jarvis.settings
+        try:
+            problem = startup_problem(s)
+        except Exception as exc:
+            problem = str(exc)
+        return {
+            "needed": problem is not None,
+            "problem": problem,
+            "profile": {
+                "address_as": s.address_as, "location": s.location, "provider": s.provider,
+                "base_url": s.compat_base_url, "model": s.compat_model,
+                "ollama_model": s.ollama_model, "claude_model": s.model,
+                "permission_mode": s.permission_mode,
+            },
+        }
+
+    @app.get("/api/setup")
+    def setup_get(request: Request) -> dict:
+        authorise(request)
+        return setup_state()
+
+    @app.post("/api/setup")
+    async def setup_post(request: Request) -> dict:
+        """Save the setup screen's answers, then check that the model answers."""
+        authorise(request)
+        from jarvis.core import secrets as keychain
+        from jarvis.core.brains import BrainError
+        from jarvis.core.config import ADJUSTABLE, PROFILE, save_override, save_profile
+
+        data = await request.json()
+        profile = {k: v for k, v in data.items() if k in PROFILE}
+        save_profile(jarvis.settings, profile)
+        if data.get("permission_mode") in ADJUSTABLE["permission_mode"]:
+            save_override(jarvis.settings, "permission_mode", data["permission_mode"])
+        key = str(data.get("key") or "").strip()
+        if key:
+            # Keys go to the OS keychain, never into a file.
+            name = "anthropic.key" if jarvis.settings.provider == "anthropic" else "model.key"
+            try:
+                keychain.put(name, key)
+            except keychain.SecretsUnavailable as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from None
+        jarvis.reconfigure()
+        jarvis.log.record("setup", detail=f"provider {jarvis.settings.provider}; fields: {', '.join(sorted(profile)) or 'none'}" + ("; key stored" if key else ""))
+
+        state = setup_state()
+        if not state["needed"] and hasattr(jarvis.brain, "ping"):
+            try:
+                await run_in_threadpool(jarvis.brain.ping)
+            except BrainError as exc:
+                state.update(needed=True, problem=str(exc))
+        return state
+
+    # ---- connecting accounts from the window
+
+    @app.post("/api/connections/{key}/connect")
+    async def connect(key: str, request: Request) -> dict:
+        authorise(request)
+        from jarvis.core import secrets as keychain
+        from jarvis.integrations import accounts, cli, oauth, tokens
+
+        account = accounts.ACCOUNTS.get(key)
+        if account is None:
+            raise HTTPException(status_code=404)
+        data = await request.json()
+
+        def work() -> str:
+            if isinstance(account, tokens.TokenAccount):
+                token_value = str(data.get("token") or "").strip()
+                if not token_value:
+                    raise oauth.ApiError(0, "Paste the token first.")
+                tokens.connect(account, token_value)
+                try:
+                    return cli._whoami(account)
+                except Exception:
+                    tokens.disconnect(account)  # do not keep a token that does not work
+                    raise
+            client_id = str(data.get("client_id") or "").strip()
+            client_secret = str(data.get("client_secret") or "").strip()
+            if not client_id or (account.needs_secret and not client_secret):
+                raise oauth.ApiError(0, "Fill in the Client ID" + (" and Client secret" if account.needs_secret else "") + " first.")
+            oauth.connect(account, client_id, client_secret or None)  # opens the browser and waits for approval
+            return cli._whoami(account)
+
+        try:
+            who = await run_in_threadpool(work)
+        except (oauth.ApiError, oauth.NotConnected, keychain.SecretsUnavailable) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+        jarvis.log.record("connection", detail=f"{account.label} connected from the control panel")
+        return {"ok": True, "as": who}
+
     # ---- the conversation so far, for redrawing after a restart
 
     @app.get("/api/conversation")
@@ -296,6 +392,7 @@ def create_app(jarvis: Jarvis, token: str | None = None, make_agent=None) -> Fas
             "speak_replies": s.speak_replies,
             "wake_word": s.wake_word,
             "follow_up": s.follow_up,
+            "sight": s.sight,
             "permission_mode": s.permission_mode,
         }
 

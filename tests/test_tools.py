@@ -17,7 +17,7 @@ def test_plugin_loader_finds_all_tools(registry):
         "read_file", "list_dir", "search_files", "write_file", "make_dir",
         "move_file", "delete_file", "run_command", "run_python",
         "web_search", "read_page", "open_url",
-        "remember", "recall", "forget", "read_document", "weather",
+        "remember", "recall", "forget", "read_document", "weather", "look_at_screen",
         "schedule_add", "schedule_list", "schedule_remove",
         "github_repos", "github_issues", "github_read", "github_file", "github_notifications",
         "github_create_issue", "github_comment",

@@ -67,6 +67,16 @@ class Jarvis:
         self._overhead: int | None = None
         self._warned_day = ""
 
+    def reconfigure(self) -> None:
+        """Call after the name, city or model service has changed. The
+        model's instructions change, so its request history starts again
+        (from a recap); what is on screen is kept."""
+        self.brain = make_brain(self.settings)
+        self.system_prompt = build_system_prompt(self.settings)
+        self.messages = []
+        self.context_tokens = 0
+        self._overhead = None
+
     def clear(self) -> None:
         self.messages = []
         self.context_tokens = 0

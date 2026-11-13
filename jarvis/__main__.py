@@ -95,10 +95,10 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout = sys.stderr = log_file
 
     problem = startup_problem()
-    if problem:
+    if problem and command == "chat":
+        # The window has a setup screen for this; the terminal does not.
         print(problem)
-        if windowless:
-            _message_box(problem)
+        print("Start the window instead (python -m jarvis) and fill in the setup screen.")
         return 1
 
     jarvis = build()

@@ -144,7 +144,10 @@ def test_errors_are_explained_and_key_never_logged(jarvis, service):
 def test_startup_checks(settings, service, monkeypatch):
     assert startup_problem(settings) is None
     monkeypatch.delenv("JARVIS_API_KEY")
-    assert "setx JARVIS_API_KEY" in startup_problem(settings)
+    from jarvis.core import secrets
+
+    monkeypatch.setattr(secrets, "get", lambda name: None)
+    assert "No key" in startup_problem(settings)
     monkeypatch.setenv("JARVIS_API_KEY", KEY)
     settings.compat_base_url = "http://example.com/v1"
     assert "https://" in startup_problem(settings)  # no keys over plain http

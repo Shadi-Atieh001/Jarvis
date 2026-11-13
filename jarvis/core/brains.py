@@ -41,6 +41,16 @@ class BrainError(Exception):
     """A problem the user can act on (model missing, server not running)."""
 
 
+def stored_key(name: str) -> str:
+    """A key from the OS keychain, or "" if there is none (or no keychain)."""
+    try:
+        from jarvis.core import secrets
+
+        return secrets.get(name) or ""
+    except Exception:
+        return ""
+
+
 # ---------------------------------------------------------------- Anthropic
 
 
@@ -58,9 +68,11 @@ class AnthropicBrain:
         if self._client is None:
             import anthropic
 
-            # Reads ANTHROPIC_API_KEY from the environment. The key is never
-            # passed around, stored or logged by JARVIS.
-            self._client = anthropic.Anthropic()
+            # Uses ANTHROPIC_API_KEY from the environment if it is set,
+            # otherwise the key the setup screen stored in the OS keychain.
+            # The key is never written to a file or logged.
+            key = stored_key("anthropic.key") if not os.environ.get("ANTHROPIC_API_KEY") else None
+            self._client = anthropic.Anthropic(api_key=key) if key else anthropic.Anthropic()
         return self._client
 
     def respond(self, system: str, tools: list[dict], messages: list[dict], on_text: Callable[[str], None], kill: KillSwitch):
@@ -308,13 +320,26 @@ class OpenAICompatBrain:
         self._ask_usage = True
 
     def _key(self) -> str:
-        return os.environ.get(self.settings.compat_api_key_env, "")
+        """The service's key: from the environment variable if it is set,
+        otherwise from the OS keychain (where the setup screen stores it)."""
+        return os.environ.get(self.settings.compat_api_key_env, "") or stored_key("model.key")
+
+    def ping(self) -> None:
+        """A tiny request, to prove the address, model and key all work.
+        Raises BrainError with a readable message if they do not."""
+        body = {"model": self.settings.compat_model, "max_tokens": 64, "stream": False,
+                "messages": [{"role": "user", "content": "Reply with the single word: ready"}]}
+        with self._post(body):
+            pass
 
     def _open(self, body: dict):
-        """Send the request and return the open response stream."""
+        """Send a chat request and return the open response stream."""
         if self._ask_usage:
             # Ask the service to report how many tokens the request used.
             body = {**body, "stream_options": {"include_usage": True}}
+        return self._post(body)
+
+    def _post(self, body: dict):
         request = urllib.request.Request(
             self.base_url + "/chat/completions",
             data=json.dumps(body).encode("utf-8"),
@@ -328,7 +353,7 @@ class OpenAICompatBrain:
             hint = {
                 401: " The key was rejected; check it is correct and still valid.",
                 403: " The key is not allowed to use this model.",
-                404: " Check base_url and model in settings.toml.",
+                404: " Check the service address and the model name.",
                 429: " The service's rate or usage limit was reached; wait and try again.",
             }.get(exc.code, "")
             raise BrainError(f"The model service returned an error ({exc.code}).{hint}\n{detail}") from None
@@ -353,12 +378,7 @@ class OpenAICompatBrain:
         if not self.base_url.startswith("https://") and "//localhost" not in self.base_url and "//127.0.0.1" not in self.base_url:
             return "base_url under [openai_compatible] must start with https:// so your key is not sent unencrypted."
         if not self._key():
-            env = self.settings.compat_api_key_env
-            return (
-                f"{env} is not set. Store your key once with:\n"
-                f'  setx {env} "your-key-here"\n'
-                "then open a new terminal and start JARVIS again."
-            )
+            return "No key has been entered for the model service yet."
         return None
 
     def respond(self, system: str, tools: list[dict], messages: list[dict], on_text: Callable[[str], None], kill: KillSwitch):

@@ -22,6 +22,7 @@ HELP = {
     ),
     "github": "You need a GitHub personal access token (see the README, 'Connecting GitHub').",
     "notion": "You need a Notion internal integration secret (see the README, 'Connecting Notion').",
+    "gemini": "You need a Gemini API key, free from https://aistudio.google.com/apikey (see the README, 'Sight').",
 }
 
 
@@ -33,6 +34,13 @@ def _whoami(account) -> str:
         # Spotify no longer reports account details to personal apps, so check a player call instead.
         oauth.call(SPOTIFY, "GET", "https://api.spotify.com/v1/me/player/devices")
         return "your Spotify account"
+    if account.key == "gemini":
+        from jarvis.core import secrets as keychain
+        from jarvis.core.config import load_settings
+        from jarvis.tools.sight import verify_key
+
+        verify_key(keychain.get("gemini.token") or "", load_settings().sight_model)
+        return "your Google AI Studio key"
     if account is GITHUB:
         return tokens.call(GITHUB, "GET", "https://api.github.com/user").get("login", "your GitHub account")
     bot = tokens.call(NOTION, "GET", "https://api.notion.com/v1/users/me")

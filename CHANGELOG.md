@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.13.0 — Sight, a setup screen and an installer (2026-11-13)
+
+Added
+- Sight: `look_at_screen` takes one picture of the window in front or the
+  whole screen, when asked, and has Google Gemini describe it. An eye button
+  switches sight off entirely. The latest picture is kept at
+  `~/.jarvis/last_look.jpg`. Connect with a free Gemini key.
+- A setup screen, shown the first time JARVIS starts and available from
+  CONTROL > Settings: what to call you, your city, which model to use, the
+  key, and the permission mode. It checks that the model answers.
+- Accounts can be connected from CONTROL > Accounts, without a terminal.
+- `installer/Install-JARVIS.bat`: one file that installs or updates JARVIS
+  on a Windows PC, including Python and Git if missing.
+
+Changed
+- Model keys may now be kept in Windows Credential Manager (entered on the
+  setup screen) as well as in environment variables.
+- JARVIS opens its window even when no model is configured, instead of
+  stopping with an error.
+- New installations start in Careful mode (chosen on the setup screen).
+
+Not yet verified
+- The installer is PowerShell and has not been run; it could only be
+  proofread here.
+- Capturing the screen is Windows-only code, tested with a stand-in.
+- Gemini is tested against a stand-in following Google's documentation,
+  not with a live key.
+
 ## 0.12.0 — Dependability (2026-11-13)
 
 Added

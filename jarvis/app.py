@@ -34,11 +34,8 @@ def startup_problem(settings: Settings | None = None) -> str | None:
         return OpenAICompatBrain(settings).check()
     if settings.provider != "anthropic":
         return f'Unknown provider {settings.provider!r} in settings.toml. Use "ollama", "openai_compatible" or "anthropic".'
-    if os.environ.get("ANTHROPIC_API_KEY"):
+    from jarvis.core.brains import stored_key
+
+    if os.environ.get("ANTHROPIC_API_KEY") or stored_key("anthropic.key"):
         return None
-    return (
-        "ANTHROPIC_API_KEY is not set. In Command Prompt or PowerShell, set it once with:\n"
-        '  setx ANTHROPIC_API_KEY "your-key-here"\n'
-        "then open a new terminal and start JARVIS again.\n"
-        'To run free on a local model instead, set provider = "ollama" in settings.toml.'
-    )
+    return "No Anthropic API key has been entered yet."

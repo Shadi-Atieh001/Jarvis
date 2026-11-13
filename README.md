@@ -15,11 +15,13 @@ and the screen control are Windows-only.
 ## Contents
 
 - [What JARVIS can do](#what-jarvis-can-do)
+- [Installing on another PC](#installing-on-another-pc)
 - [Setup (Windows)](#setup-windows)
 - [Choosing a brain](#choosing-a-brain)
 - [Running](#running)
 - [Conversations, tokens and updates](#conversations-tokens-and-updates)
 - [The window](#the-window) and [the control panel](#the-control-panel)
+- [Sight](#sight)
 - [Voice](#voice)
 - [Memory](#memory)
 - [Reminders, scheduled tasks and the morning briefing](#reminders-scheduled-tasks-and-the-morning-briefing)
@@ -40,6 +42,7 @@ and the screen control are Windows-only.
 | Commands and code | run PowerShell commands; write and run Python in the workspace |
 | Web | search the web, read a page's text, open a page in your browser |
 | Screen | list open windows, read what is in a window, open apps |
+| Sight | look at the screen or the window in front, when asked |
 | Mouse and keyboard | click, type, press key combinations |
 | Memory | remember, recall, forget |
 | Gmail | search, read, send, draft |
@@ -50,12 +53,11 @@ and the screen control are Windows-only.
 | Schedule | reminders, recurring tasks, the morning briefing |
 | Weather | current conditions and a three-day forecast |
 
-**How it "sees" the screen.** The current model reads text only, so JARVIS
-does not look at screenshots. It asks Windows what each window contains
+**How it reads the screen.** To work an app, JARVIS asks Windows what each window contains
 (titles, buttons, menus, text fields and their contents), the same way a
 screen reader does. That works well for ordinary apps and browsers. Apps
 that draw their own interface, such as games, video and images, expose
-little or nothing.
+little or nothing; for those there is [Sight](#sight).
 
 **Documents.** `read_document` extracts the text of `.pdf`, `.docx`,
 `.pptx` (including speaker notes) and `.xlsx` files, so you can ask for a
@@ -69,6 +71,45 @@ with no account or key. They sometimes rate-limit; if a search fails, wait a
 minute. Pages that need a login or build their content with scripts may
 come back nearly empty; for those, JARVIS can open the page in your browser
 and read it from the screen instead.
+
+## Installing on another PC
+
+For someone who just wants to use JARVIS, without Python or a terminal:
+
+1. Download
+   [`Install-JARVIS.bat`](https://raw.githubusercontent.com/Shadi-Atieh001/Jarvis/main/installer/Install-JARVIS.bat)
+   (right-click the link and choose "Save link as").
+2. Double-click it. Windows will warn that it is from an unknown publisher,
+   because the file is not signed; choose "More info", then "Run anyway".
+3. Wait. It installs Python and Git if they are missing, downloads JARVIS
+   into a `Jarvis` folder in your user folder, sets it up, puts an icon on
+   the desktop and starts it. It needs an internet connection, about 3 GB
+   of disk space and 10 to 20 minutes.
+4. JARVIS opens on a **setup screen** asking what to call you, your city,
+   and which model to use. See [Choosing a brain](#choosing-a-brain); you
+   need your own key for a hosted model, or Ollama for a free local one.
+
+Running the installer again updates JARVIS. After that, updates are a
+button under CONTROL > Settings.
+
+Each person needs their own model key and, if they want email, calendar,
+music, notes or sight, their own account connections (CONTROL > Accounts).
+None of these are shared by the installer.
+
+A new installation starts in **Careful** mode, in which JARVIS asks before
+changing, deleting or running anything. Remember what this program is: an
+assistant that can run commands and work the mouse and keyboard. Read
+[Permissions](#permissions) before choosing a looser mode.
+
+**Uninstalling.** Quit JARVIS from the tray icon, then delete: the `Jarvis`
+folder in your user folder; the `.jarvis` folder beside it (settings,
+memory, logs, downloaded models); the JARVIS shortcuts on the desktop and
+in the Start menu; and, in Windows' Credential Manager under Windows
+Credentials, the entries named JARVIS. Python and Git, if the installer
+added them, are removed from Windows' "Installed apps" like any program.
+
+The rest of this file describes installing by hand, which is what the
+installer does for you.
 
 ## Setup (Windows)
 
@@ -100,12 +141,16 @@ and read it from the screen instead.
    .venv\Scripts\python -m jarvis setup
    ```
 
-5. Choose a brain (next section), then check everything works:
+5. Check everything works, then start JARVIS:
 
    ```powershell
    .venv\Scripts\python -m pytest
    .venv\Scripts\python -m jarvis
    ```
+
+   The first time, the window opens on a setup screen that asks what to
+   call you, your city, and which model to use (next section). You can
+   reopen it any time from CONTROL > Settings.
 
 6. Optional: add a desktop and Start menu icon, so you never need the
    terminal to start it again:
@@ -120,9 +165,17 @@ brevity. Unless you have activated the environment, type
 
 ## Choosing a brain
 
-`provider` in `settings.toml` decides which model JARVIS thinks with. There
-are three choices. Whichever you pick, the permission rules, the action log
-and the tools are identical.
+JARVIS needs a model to think with. There are three kinds to choose from,
+and whichever you pick, the permission rules, the action log and the tools
+are identical. The easy way to choose is the setup screen (CONTROL >
+Settings > "Change name, city or model"): it takes the service's address,
+the model's name and your key, stores the key in Windows Credential
+Manager, and checks that the model answers before closing.
+
+The same choices can be made by hand: `provider` in `settings.toml` (or
+`settings.local.toml`), and the key in an environment variable, as
+described below. A key in the environment takes priority over one entered
+on the setup screen.
 
 | Provider | Cost | Privacy | Quality |
 |---|---|---|---|
@@ -344,6 +397,40 @@ to return to what `settings.toml` says. JARVIS itself needs your approval
 to write to either file, so it cannot quietly loosen its own permissions
 through its file tools.
 
+## Sight
+
+JARVIS can look at your screen when you ask: "look at my screen", "what's
+this error?", "what does this chart show?". It takes **one picture**, of the
+window in front or of the whole screen, whichever you say, and answers from
+it. If you typed the request, "the window in front" means the window behind
+JARVIS's own.
+
+The main model reads only text, so JARVIS borrows a second model for its
+eyes: Google's Gemini. To set it up, get a free API key at
+<https://aistudio.google.com/apikey> and paste it under CONTROL > Accounts
+> Gemini (or run `python -m jarvis connect gemini`).
+
+- **It looks only when a request asks it to.** It never watches, and never
+  looks on its own initiative.
+- **The eye button** beside the microphone switches sight off completely.
+  While it is off, a look is refused by JARVIS itself, whatever the model
+  wants.
+- **The picture leaves your computer.** It is sent to Google. On Gemini's
+  free tier, Google's terms say it may use what you send to improve its
+  products, and that people may review it. Whatever is visible is in the
+  picture, so close anything private first, or ask for the window in front
+  rather than the whole screen.
+- **You can see what was sent.** The latest picture is kept at
+  `~/.jarvis/last_look.jpg`, and every look is in the action log.
+- In Careful mode, each look asks for your approval first.
+- For working an app's buttons and fields, JARVIS still uses the screen
+  reader method described under [What JARVIS can do](#what-jarvis-can-do),
+  which is faster and sends nothing anywhere. Sight is for what that cannot
+  read: pictures, charts, video, games, the look of a page.
+
+The model used is set under `[sight]` in `settings.toml`. If your key cannot
+use it, a few alternatives are tried automatically.
+
 ## Voice
 
 Click the microphone (or press Ctrl+Space), speak, and stop talking; JARVIS
@@ -495,7 +582,12 @@ require every app, even a personal one, to be registered with them, and
 GitHub and Notion need an access token that you create.
 
 All of these are optional. Without them JARVIS still does everything else,
-and says which command to run if you ask for something that needs one.
+and says what to connect if you ask for something that needs one.
+
+**The easy way to connect is in the window:** CONTROL > Accounts has a
+short form for each account. The commands below do the same from a
+terminal. Either way, you first need the ID, secret or token described in
+each section.
 
 Sign-in tokens are stored in Windows Credential Manager (entries named
 JARVIS), never in a file. Your passwords never reach JARVIS.
@@ -507,6 +599,7 @@ JARVIS), never in a file. Your passwords never reach JARVIS.
 | `python -m jarvis connect spotify` | Signs in to Spotify |
 | `python -m jarvis connect github` | Stores a GitHub access token |
 | `python -m jarvis connect notion` | Stores a Notion integration secret |
+| `python -m jarvis connect gemini` | Stores a Gemini key, for [Sight](#sight) |
 | `python -m jarvis disconnect google` | Signs out and deletes the stored tokens |
 
 ### Connecting Google (about 10 minutes, once)
@@ -686,6 +779,8 @@ and anything that looks like a password or token are removed before writing.
   and the results of its tools.
 - **To the services you connect**: only the requests needed to do what you
   asked (Google, Spotify, GitHub, Notion).
+- **To Google Gemini, when you ask JARVIS to look**: one picture of your
+  screen or of the window in front, with your question. See [Sight](#sight).
 - **To public services, without an account**: web searches go to public
   search engines, and the weather widget and tool ask Open-Meteo about your
   configured location.
@@ -721,7 +816,7 @@ jarvis/
                      Notion (tokens.py)
   tools/             one file per group of tools: files, shell, code, web,
                      documents, desktop, memory, schedule, weather, google,
-                     spotify, github, notion
+                     spotify, github, notion, sight
   ui/
     terminal.py      terminal chat
     server.py        local server behind the window
@@ -729,6 +824,7 @@ jarvis/
     shortcut.py      the desktop and Start menu shortcut
     web/index.html   the interface (one file: markup, styles and script)
     web/jarvis.ico   the icon
+installer/           the one-file installer and the script it runs
 docs/screenshot.png  the picture at the top of this file
 tests/               one file per area; no test needs the network or an account
 ```
@@ -773,8 +869,9 @@ for it, add its name to `segmentFor` in `index.html`.
   other two on each request, so everything else (permissions, logging,
   tools) is shared.
 - **Keys are never in files.** Model keys are read from environment
-  variables (`JARVIS_API_KEY`, `ANTHROPIC_API_KEY`); account tokens are in
-  Windows Credential Manager. The log scrubs anything that looks like one.
+  variables (`JARVIS_API_KEY`, `ANTHROPIC_API_KEY`) or, if entered on the
+  setup screen, from Windows Credential Manager, where account tokens also
+  live. The log scrubs anything that looks like one.
 - **The model's request history is append-only.** Some models verify that
   earlier turns were not edited, so the code only ever adds to
   `Jarvis.messages`. It is never trimmed in place: when it grows too large,
@@ -818,5 +915,5 @@ Everything in the original plan is built: the core, memory, the
 integrations, scheduling and voice. Ideas not yet done:
 
 - WhatsApp, which today works only by controlling WhatsApp Web on screen.
-- Seeing screenshots, which needs a model that accepts images.
+- Watching the screen over time (sight is one look per request for now).
 - A sandbox stronger than a folder (a container or virtual machine).

@@ -72,6 +72,15 @@ model = "IFM/K2-Horizon-375B-A23B"
 # itself. Store the key with:  setx JARVIS_API_KEY "your-key-here"
 api_key_env = "JARVIS_API_KEY"
 
+[sight]
+# Let JARVIS look at your screen when you ask it to. Each look sends one
+# picture to Google Gemini (connect with: python -m jarvis connect gemini).
+# The eye button in the window switches this on and off.
+enabled = true
+# The Gemini model used as JARVIS's eyes. If this key cannot use it, a few
+# others are tried automatically.
+model = "gemini-3.5-flash-lite"
+
 [launcher]
 # The quick-launch buttons at the right of the window. "open" is a folder or
 # file path, a web address, or an app's name as it appears in the Start menu.

@@ -40,8 +40,12 @@ def test_cli_refuses_to_start_without_key(settings, monkeypatch, capsys, tmp_pat
     cfg.write_text(f'[assistant]\nprovider = "anthropic"\n[paths]\nhome = "{settings.home.as_posix()}"\n')
     monkeypatch.setenv("JARVIS_SETTINGS", str(cfg))
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    from jarvis.core import secrets
+
+    monkeypatch.setattr(secrets, "get", lambda name: None)
     assert main(["chat"]) == 1
-    assert "ANTHROPIC_API_KEY" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "No Anthropic API key" in out and "setup screen" in out
 
 
 def _connect(client, token, origin="http://testserver"):
