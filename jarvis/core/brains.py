@@ -50,6 +50,8 @@ class AnthropicBrain:
     def __init__(self, settings: Settings, client: Any = None):
         self.settings = settings
         self._client = client
+        self.last_usage: dict | None = None  # {"input", "output"} tokens of the latest request
+        self.limits: dict = {}
 
     @property
     def client(self):
@@ -82,7 +84,13 @@ class AnthropicBrain:
                     for delta in stream.text_stream:
                         kill.check()
                         on_text(delta)
-                    return stream.get_final_message()
+                    message = stream.get_final_message()
+                    usage = getattr(message, "usage", None)
+                    if usage is not None:
+                        # Cached input is still input: it all counts toward the conversation's size.
+                        sent = sum(getattr(usage, k, 0) or 0 for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"))
+                        self.last_usage = {"input": sent, "output": getattr(usage, "output_tokens", 0) or 0}
+                    return message
             except ValueError as exc:
                 # The SDK raises ValueError when a streamed tool input is not
                 # valid JSON. Ask again once; API errors are not caught here.
@@ -103,6 +111,8 @@ class OllamaBrain:
         self.settings = settings
         self.host = settings.ollama_host.rstrip("/")
         self.last_stats: str | None = None  # timings of the latest reply
+        self.last_usage: dict | None = None
+        self.limits: dict = {}
 
     def respond(self, system: str, tools: list[dict], messages: list[dict], on_text: Callable[[str], None], kill: KillSwitch):
         body = {
@@ -171,6 +181,7 @@ class OllamaBrain:
                 if chunk.get("done"):
                     done_reason = chunk.get("done_reason") or "stop"
                     self.last_stats = _timings(chunk)
+                    self.last_usage = {"input": chunk.get("prompt_eval_count") or 0, "output": chunk.get("eval_count") or 0}
 
         content: list = []
         if text_parts:
@@ -292,9 +303,49 @@ class OpenAICompatBrain:
     def __init__(self, settings: Settings):
         self.settings = settings
         self.base_url = settings.compat_base_url.rstrip("/")
+        self.last_usage: dict | None = None
+        self.limits: dict = {}
+        self._ask_usage = True
 
     def _key(self) -> str:
         return os.environ.get(self.settings.compat_api_key_env, "")
+
+    def _open(self, body: dict):
+        """Send the request and return the open response stream."""
+        if self._ask_usage:
+            # Ask the service to report how many tokens the request used.
+            body = {**body, "stream_options": {"include_usage": True}}
+        request = urllib.request.Request(
+            self.base_url + "/chat/completions",
+            data=json.dumps(body).encode("utf-8"),
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {self._key()}"},
+        )
+        try:
+            return urllib.request.urlopen(request, timeout=600)
+        except urllib.error.HTTPError as exc:
+            self._read_limits(exc.headers)
+            detail = exc.read().decode("utf-8", errors="replace")[:500]
+            hint = {
+                401: " The key was rejected; check it is correct and still valid.",
+                403: " The key is not allowed to use this model.",
+                404: " Check base_url and model in settings.toml.",
+                429: " The service's rate or usage limit was reached; wait and try again.",
+            }.get(exc.code, "")
+            raise BrainError(f"The model service returned an error ({exc.code}).{hint}\n{detail}") from None
+        except urllib.error.URLError as exc:
+            raise BrainError(f"Cannot reach {self.base_url} ({exc.reason}). Check base_url and your connection.") from None
+
+    def _read_limits(self, headers) -> None:
+        """Some services say how much of the daily allowance is left."""
+        if headers is None:
+            return
+        for field, header in (("daily_limit", "x-ratelimit-limit-tokens-daily"), ("daily_remaining", "x-ratelimit-remaining-tokens-daily")):
+            value = headers.get(header)
+            if value is not None:
+                try:
+                    self.limits[field] = int(float(value))
+                except ValueError:
+                    pass
 
     def check(self) -> str | None:
         if not self.base_url or not self.settings.compat_model:
@@ -323,24 +374,17 @@ class OpenAICompatBrain:
             ],
             "stream": True,
         }
-        request = urllib.request.Request(
-            self.base_url + "/chat/completions",
-            data=json.dumps(body).encode("utf-8"),
-            headers={"Content-Type": "application/json", "Authorization": f"Bearer {self._key()}"},
-        )
+        self.last_usage = None
         try:
-            response = urllib.request.urlopen(request, timeout=600)
-        except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")[:500]
-            hint = {
-                401: " The key was rejected; check it is correct and still valid.",
-                403: " The key is not allowed to use this model.",
-                404: " Check base_url and model in settings.toml.",
-                429: " The service's rate or usage limit was reached; wait and try again.",
-            }.get(exc.code, "")
-            raise BrainError(f"The model service returned an error ({exc.code}).{hint}\n{detail}") from None
-        except urllib.error.URLError as exc:
-            raise BrainError(f"Cannot reach {self.base_url} ({exc.reason}). Check base_url and your connection.") from None
+            response = self._open(body)
+        except BrainError as exc:
+            if not self._ask_usage or "stream_options" not in str(exc):
+                raise
+            # This service does not understand the request for token counts;
+            # carry on without, and estimate instead.
+            self._ask_usage = False
+            response = self._open(body)
+        self._read_limits(response.headers)
 
         text_parts: list[str] = []
         reasoning_parts: list[str] = []
@@ -358,6 +402,11 @@ class OpenAICompatBrain:
                 chunk = json.loads(payload)
                 if chunk.get("error"):
                     raise BrainError(f"The model service reported an error: {chunk['error']}")
+                if chunk.get("usage"):  # arrives in the last chunk
+                    self.last_usage = {
+                        "input": chunk["usage"].get("prompt_tokens") or 0,
+                        "output": chunk["usage"].get("completion_tokens") or 0,
+                    }
                 for choice in chunk.get("choices") or []:
                     delta = choice.get("delta") or {}
                     if delta.get("content"):

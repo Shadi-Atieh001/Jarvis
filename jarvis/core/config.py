@@ -24,6 +24,8 @@ class Settings:
     effort: str = "medium"
     refusal_fallback: bool = True
     max_steps: int = 40
+    context_budget: int = 40000  # tokens; beyond this the conversation is condensed
+    daily_token_limit: int = 0  # the service's daily allowance, if known (0 = unknown)
     location: str = "Sharjah"
 
     provider: str = "anthropic"  # "anthropic" or "ollama"
@@ -77,13 +79,19 @@ def find_settings_file() -> Path | None:
 def load_settings(path: Path | None = None) -> Settings:
     path = path or find_settings_file()
     data = tomllib.loads(path.read_text(encoding="utf-8")) if path else {}
+    # Your own settings go in settings.local.toml, beside settings.toml. It
+    # is layered on top, and git ignores it, so updates never clash with it.
+    local = path.with_name("settings.local.toml") if path else None
+    if local is not None and local.is_file():
+        _merge(data, tomllib.loads(local.read_text(encoding="utf-8")))
 
     assistant = data.get("assistant", {})
     paths = data.get("paths", {})
     perms = data.get("permissions", {})
 
     s = Settings()
-    for key in ("address_as", "provider", "model", "effort", "refusal_fallback", "max_steps", "location"):
+    for key in ("address_as", "provider", "model", "effort", "refusal_fallback", "max_steps", "location",
+                "context_budget", "daily_token_limit"):
         if key in assistant:
             setattr(s, key, assistant[key])
 
@@ -173,6 +181,15 @@ def save_override(s: Settings, key: str, value) -> None:
     saved[key] = value
     path.write_text(json.dumps(saved, indent=2), encoding="utf-8")
     setattr(s, key, value)
+
+
+def _merge(base: dict, extra: dict) -> None:
+    """Lay `extra` over `base`: tables are merged, anything else replaced."""
+    for key, value in extra.items():
+        if isinstance(value, dict) and isinstance(base.get(key), dict):
+            _merge(base[key], value)
+        else:
+            base[key] = value
 
 
 def _expand(p: str | Path) -> Path:

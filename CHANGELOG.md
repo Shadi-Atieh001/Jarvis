@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.12.0 — Dependability (2026-11-13)
+
+Added
+- The conversation survives a restart: it is saved to
+  `~/.jarvis/conversation.json` and redrawn in the window. The model
+  continues from a written recap of it.
+- Long conversations are condensed automatically once they pass
+  `context_budget` tokens (default 40,000), with a notice in the window.
+- Token usage: a Usage widget (today against the daily allowance, and the
+  size of the conversation), `/usage`, a warning at 80% of the allowance,
+  and a per-day record in `~/.jarvis/usage.json`. Uses the service's own
+  figures where it reports them, and estimates otherwise.
+- Updating from the window: CONTROL > Settings shows the version and any
+  updates, with Update now and Restart JARVIS now.
+- `settings.local.toml`: personal settings layered over `settings.toml` and
+  ignored by git, so updates never clash with them.
+
+Changed
+- `/clear` now also forgets the saved conversation.
+
+Not yet verified
+- Restarting from the window is Windows-only and untested here.
+- Whether the IFM service reports token counts and the remaining allowance
+  in the way its documentation describes. If it does not, JARVIS falls back
+  to its own estimate automatically.
+
 ## 0.11.2 — Documentation (2026-11-12)
 
 Changed

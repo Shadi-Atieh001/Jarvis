@@ -10,11 +10,13 @@ from .actionlog import format_entries
 from .agent import Jarvis
 from jarvis.memory.store import format_memories
 from jarvis.scheduler.store import format_items
+from .usage import format_tokens
 
 HELP = """Commands:
   /help            show this list
   /tools           list the tools JARVIS has and their permission tiers
   /log [n]         show the last n actions (default 20)
+  /usage           show how many tokens have been used today and this week
   /schedule        show reminders and scheduled tasks;  /unschedule <number>  cancels one
   /memories [text] show what JARVIS remembers (optionally: about text)
   /forget <number> delete one memory;  /forget all  deletes everything
@@ -49,6 +51,15 @@ def handle(text: str, jarvis: Jarvis) -> str | None:
     if cmd == "/log":
         n = int(args[0]) if args and args[0].isdigit() else 20
         return format_entries(jarvis.log.tail(n))
+    if cmd == "/usage":
+        state = jarvis.allowance()
+        limit = f" of {format_tokens(state['limit'])}" if state["limit"] else ""
+        lines = [
+            f"Today: {format_tokens(state['used'])}{limit} tokens, in {state['requests']} requests.",
+            f"This conversation: about {format_tokens(jarvis._size())} tokens per request; it is condensed at {format_tokens(jarvis.settings.context_budget)}.",
+            "Last 7 days (UTC): " + ", ".join(f"{d['date'][5:]} {format_tokens(d['total'])}" for d in jarvis.usage.history()),
+        ]
+        return "\n".join(lines)
     if cmd in ("/schedule", "/unschedule"):
         schedule = jarvis.ctx.schedule
         if schedule is None:

@@ -1,4 +1,15 @@
-# JARVIS settings. Edit freely; restart JARVIS to apply.
+# JARVIS settings. Restart JARVIS to apply changes.
+#
+# To keep your own changes separate (recommended), create a file called
+# settings.local.toml beside this one and put only the settings you want to
+# change in it, under the same [section] names. It takes priority over this
+# file, and updates never touch it. Example settings.local.toml:
+#
+#   [assistant]
+#   location = "Dubai"
+#
+#   [voice]
+#   wake_threshold = 0.6
 # The API key is NOT stored here. It is read from the ANTHROPIC_API_KEY
 # environment variable only.
 
@@ -21,6 +32,16 @@ effort = "medium"
 refusal_fallback = true
 # Safety cap on tool calls per request, so a confused loop cannot run forever.
 max_steps = 40
+# Every request resends the whole conversation, so a long one gets slow and
+# uses many tokens. When the conversation passes this size (in tokens,
+# roughly 3/4 of a word each), JARVIS condenses it: the model continues from
+# a written recap instead of the full history. Lower = cheaper, but it
+# forgets detail sooner. The instructions and tool list alone are about
+# 10,000.
+context_budget = 40000
+# Your model service's daily token allowance, for the usage gauge. Used only
+# if the service does not report it itself. 0 = unknown.
+daily_token_limit = 10000000
 location = "Sharjah"
 
 [ollama]

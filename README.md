@@ -18,6 +18,7 @@ and the screen control are Windows-only.
 - [Setup (Windows)](#setup-windows)
 - [Choosing a brain](#choosing-a-brain)
 - [Running](#running)
+- [Conversations, tokens and updates](#conversations-tokens-and-updates)
 - [The window](#the-window) and [the control panel](#the-control-panel)
 - [Voice](#voice)
 - [Memory](#memory)
@@ -217,10 +218,11 @@ Inside the window or a chat, type `/help` for the commands:
 |---|---|
 | `/tools` | Lists the tools and the permission mode |
 | `/log 30` | Shows the last 30 actions |
+| `/usage` | Shows tokens used today and this week |
 | `/memories`, `/forget 3` | Shows what is remembered; deletes one memory |
 | `/schedule`, `/unschedule 3` | Shows what is scheduled; cancels one item |
 | `/stop`, `/resume` | Engages and clears the emergency stop |
-| `/clear` | Starts a fresh conversation |
+| `/clear` | Starts a fresh conversation and forgets the current one |
 
 Terminal chat (`python -m jarvis chat`) has no scheduler, voice or widgets;
 it is there for testing and for when the window is unavailable.
@@ -243,6 +245,58 @@ have printed is kept in `~/.jarvis/jarvis.log`.
 
 If you ever move the Jarvis folder, run the command again.
 
+## Conversations, tokens and updates
+
+**The conversation survives a restart.** Quit JARVIS, or let the laptop
+restart, and the conversation is on screen again when it comes back, under
+a line reading "earlier conversation above". Type `/clear` to start afresh.
+
+What is restored is what was *said*. The model itself does not get its full
+working history back; it gets a written recap of the conversation and
+carries on from that. It will know what you were talking about, but if it
+needs the exact contents of something it read earlier, it reads it again.
+
+**Long conversations are condensed automatically.** Every request sends the
+whole conversation to the model, so a long one becomes slow and uses many
+tokens. When it passes `context_budget` (40,000 tokens by default; set under
+`[assistant]`), JARVIS tells you, and the model continues from a recap, the
+same way as after a restart. Nothing disappears from your screen, and
+everything said remains searchable through memory.
+
+**Usage is shown in the window.** The Usage widget on the left has two bars:
+
+- *Today*: tokens used today against the daily allowance. If the model
+  service reports the allowance itself, that figure is used; otherwise the
+  limit comes from `daily_token_limit` in `settings.toml` and JARVIS counts
+  its own requests. The day runs on UTC, which is when hosted services
+  reset. JARVIS warns you once when 80% is gone.
+- *Conversation*: how large the current conversation is, against the point
+  at which it will be condensed.
+
+`/usage` shows the same, plus the last seven days. A token is roughly
+three-quarters of a word. Note that about 10,000 tokens go with every
+request before you say anything: the instructions and the list of tools.
+
+**Updating from the window.** Open **CONTROL > Settings**. The top section
+shows the installed version and whether a newer one is on GitHub, with a
+list of what changed. **Update now** fetches it and installs anything it
+needs; **Restart JARVIS now** then restarts into the new version. This is
+`git pull` and `pip install` run for you.
+
+An update is refused, with nothing changed, if you have edited a file that
+the update also changes. To avoid that, keep your own settings in a file
+called `settings.local.toml` beside `settings.toml`, containing only what
+you want to change under the same `[section]` names. It takes priority over
+`settings.toml`, and updates never touch it. For example:
+
+```toml
+[assistant]
+location = "Dubai"
+
+[voice]
+wake_threshold = 0.6
+```
+
 ## The window
 
 The window is laid out as a heads-up display around a central dial.
@@ -254,8 +308,8 @@ The window is laid out as a heads-up display around a central dial.
   MAIL, MUSIC and so on); each lights up when JARVIS uses a tool from that
   group, so you can see at a glance what it is touching.
 - **Left**: the date and clock (the ring fills as the day passes), processor,
-  memory, disk and battery gauges, which accounts are connected, and the
-  next scheduled item.
+  memory, disk and battery gauges, token usage, which accounts are
+  connected, and the next scheduled item.
 - **Right**: quick-launch buttons, and the weather for your location.
 - **CONTROL** and **STOP** are at the top right, as before.
 
@@ -281,8 +335,8 @@ Click **CONTROL** at the top right of the window:
 - **Accounts**: which accounts are connected, with a Disconnect button.
   Connecting still happens in a terminal, because it needs you to paste a
   Client ID.
-- **Settings**: the permission mode, when to answer aloud, follow-up
-  listening and the wake word. Changes apply immediately.
+- **Settings**: updating JARVIS, the permission mode, when to answer
+  aloud, follow-up listening and the wake word. Changes apply immediately.
 
 Choices made in the panel are saved to `~/.jarvis/overrides.json` and take
 priority over `settings.toml`, which is never rewritten. Delete that file
@@ -653,6 +707,9 @@ jarvis/
     permissions.py   the permission gate
     tools.py         tool definitions and the plugin loader
     persona.py       the system prompt (personality and rules)
+    conversation.py  the conversation on disk, and the recap given to the model
+    usage.py         token counts per day
+    updater.py       the Update button (git pull and pip install)
     actionlog.py     the action log
     killswitch.py    the emergency stop
     commands.py      /slash commands
@@ -718,9 +775,14 @@ for it, add its name to `segmentFor` in `index.html`.
 - **Keys are never in files.** Model keys are read from environment
   variables (`JARVIS_API_KEY`, `ANTHROPIC_API_KEY`); account tokens are in
   Windows Credential Manager. The log scrubs anything that looks like one.
-- **The conversation history is append-only.** The model verifies that
+- **The model's request history is append-only.** Some models verify that
   earlier turns were not edited, so the code only ever adds to
-  `Jarvis.messages`. To start over, use `/clear`.
+  `Jarvis.messages`. It is never trimmed in place: when it grows too large,
+  or after a restart, it is replaced by a new history that begins with a
+  recap.
+- **Two records of a conversation.** `conversation.json` holds what was said
+  (for the window and for recaps); the model's request history lives only in
+  memory. See `conversation.py` for why.
 - **The system prompt never changes between requests** (the current time
   and any relevant memories are added to your message instead). This lets
   the provider cache it, which makes replies cheaper and faster. Avoid
@@ -740,10 +802,12 @@ for it, add its name to `segmentFor` in `index.html`.
 - **Scheduled tasks run in their own conversation**, with the same
   permission rules, and are refused anything needing approval if you do not
   answer within two minutes.
-- **Settings have two layers.** `settings.toml` is the base; choices made in
-  the control panel are saved to `~/.jarvis/overrides.json` and win.
+- **Settings have three layers.** `settings.toml` is the base;
+  `settings.local.toml`, if you create it, is laid over that; and choices
+  made in the control panel are saved to `~/.jarvis/overrides.json` and win.
 - **Where things are kept.** Everything JARVIS stores is under `~/.jarvis`:
-  `actions.jsonl` (the log), `memory.db`, `schedule.json`, `overrides.json`,
+  `actions.jsonl` (the log), `memory.db`, `conversation.json`, `usage.json`,
+  `schedule.json`, `overrides.json`,
   `jarvis.log`, `models/`, `webview/` and `workspace/`. Deleting that folder
   resets JARVIS completely; account tokens are separate, in Credential
   Manager.

@@ -18,6 +18,7 @@ import time
 import webbrowser
 
 from jarvis.core.agent import Jarvis
+from jarvis.core.config import REPO_ROOT
 from jarvis.ui.server import serve
 from jarvis.ui.shortcut import ICON
 
@@ -40,6 +41,24 @@ def run_window(jarvis: Jarvis, start_hidden: bool = False) -> None:
     window = webview.create_window("JARVIS", url, width=1180, height=780, min_size=(480, 480), hidden=start_hidden)
     _allow_microphone(window, jarvis, url)
     tray = _start_tray(window, jarvis, app, state)
+
+    def restart():
+        """Start a fresh JARVIS a moment after this one has gone."""
+        import subprocess
+        import sys
+
+        # The short wait lets this process release its port first, so the
+        # new one gets the same address (and keeps microphone permission).
+        launcher = (
+            "import subprocess, sys, time; time.sleep(2.5); "
+            "subprocess.Popen([sys.executable, '-m', 'jarvis'] + sys.argv[1:])"
+        )
+        flags = {"creationflags": subprocess.CREATE_NO_WINDOW} if sys.platform == "win32" else {}
+        subprocess.Popen([sys.executable, "-c", launcher], cwd=str(REPO_ROOT), **flags)
+        state["quitting"] = True
+        window.destroy()
+
+    app.state.restart = restart
 
     if tray is not None:
         def on_closing():

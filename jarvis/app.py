@@ -8,6 +8,7 @@ from pathlib import Path
 from jarvis.core.actionlog import ActionLog
 from jarvis.core.agent import Jarvis
 from jarvis.core.config import Settings, load_settings
+from jarvis.core.conversation import Conversation
 from jarvis.core.killswitch import KillSwitch
 from jarvis.core.tools import load_tools
 
@@ -16,7 +17,8 @@ def build(settings_path: Path | None = None, client=None) -> Jarvis:
     settings: Settings = load_settings(settings_path)
     log = ActionLog(settings.action_log_path)
     kill = KillSwitch(settings.stop_file)
-    return Jarvis(settings, load_tools(), log, kill, client=client)
+    conversation = Conversation(settings.home / "conversation.json")  # survives a restart
+    return Jarvis(settings, load_tools(), log, kill, client=client, conversation=conversation)
 
 
 def startup_problem(settings: Settings | None = None) -> str | None:

@@ -11,6 +11,9 @@ class TerminalUI:
     def on_text(self, delta: str) -> None:
         print(delta, end="", flush=True)
 
+    def on_notice(self, text: str) -> None:
+        print(f"\n  [{text}]", flush=True)
+
     def on_tool(self, name: str, decision: str, summary: str) -> None:
         print(f"\n  [{decision}] {name}: {summary}", flush=True)
 

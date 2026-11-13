@@ -61,6 +61,9 @@ class WebUI:
     def on_tool(self, name: str, decision: str, summary: str) -> None:
         self._send({"type": "tool", "name": name, "decision": decision, "summary": summary})
 
+    def on_notice(self, text: str) -> None:
+        self._send({"type": "notice", "text": text})
+
     def confirm(self, tool_name: str, decision: Decision) -> bool:
         self._next_id += 1
         request_id = self._next_id
@@ -100,10 +103,15 @@ def create_app(jarvis: Jarvis, token: str | None = None, make_agent=None) -> Fas
     app.state.token = token
     app.state.windows = []  # the WebUI of each open window, newest last
     app.state.notify = None  # set by the tray icon: notify(title, text)
+    app.state.restart = None  # set by the desktop window: restart()
 
     # ---- scheduling: results go to the open window (and the tray, if any)
 
     def deliver(item: dict, text: str) -> None:
+        # Part of the conversation: shown again after a restart, and the
+        # model is told about it in its recap.
+        jarvis.conversation.add({"type": "scheduled", "title": item["title"], "text": text})
+        jarvis.conversation.save()
         for ui in list(app.state.windows):
             ui._send({"type": "scheduled", "title": item["title"], "text": text})
         if app.state.notify is not None:
@@ -157,7 +165,14 @@ def create_app(jarvis: Jarvis, token: str | None = None, make_agent=None) -> Fas
             except Exception:
                 connected.append({"label": account.label, "connected": False})
         upcoming = sorted((i for i in scheduler.schedule.items() if i.get("next")), key=lambda i: i["next"])
+        allowance = jarvis.allowance()
         result.update(
+            usage={
+                **allowance,
+                "context": jarvis._size() if jarvis.messages else 0,
+                "context_budget": jarvis.settings.context_budget,
+                "week": jarvis.usage.history(),
+            },
             accounts=connected,
             next=({"title": upcoming[0]["title"], "at": upcoming[0]["next"]} if upcoming else None),
             weather=glance(jarvis.settings.location),
@@ -187,6 +202,47 @@ def create_app(jarvis: Jarvis, token: str | None = None, make_agent=None) -> Fas
         jarvis.log.record("launch", detail=f"{entry['label']} ({target}) from the window" + ("" if ok else f": failed: {detail}"))
         if not ok:
             raise HTTPException(status_code=400, detail=detail or "Could not open it.")
+        return {"ok": True}
+
+    # ---- the conversation so far, for redrawing after a restart
+
+    @app.get("/api/conversation")
+    def conversation(request: Request) -> dict:
+        authorise(request)
+        return {"items": jarvis.conversation.view()}
+
+    # ---- updating
+
+    @app.get("/api/update")
+    def update_check(request: Request) -> dict:
+        authorise(request)
+        from jarvis.core import updater
+
+        try:
+            return {**updater.check(), "can_restart": app.state.restart is not None}
+        except updater.UpdateError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+
+    @app.post("/api/update")
+    def update_apply(request: Request) -> dict:
+        authorise(request)
+        from jarvis.core import updater
+
+        try:
+            result = updater.apply()
+        except updater.UpdateError as exc:
+            jarvis.log.record("update", detail=f"failed: {str(exc)[:300]}")
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+        jarvis.log.record("update", detail=f"{result['from']} -> {result['to']}")
+        return {**result, "can_restart": app.state.restart is not None}
+
+    @app.post("/api/restart")
+    def restart(request: Request) -> dict:
+        authorise(request)
+        if app.state.restart is None:
+            raise HTTPException(status_code=400, detail="Close JARVIS and open it again to finish.")
+        jarvis.log.record("update", detail="restarting")
+        threading.Timer(0.3, app.state.restart).start()  # let this reply go out first
         return {"ok": True}
 
     @app.get("/api/schedule")
@@ -389,9 +445,9 @@ def create_app(jarvis: Jarvis, token: str | None = None, make_agent=None) -> Fas
         if jarvis.kill.tripped:
             await ws.send_json({"type": "info", "text": "The emergency stop is engaged. Type /resume to clear it."})
 
-        def work(text: str) -> None:
+        def work(text: str, spoken: bool) -> None:
             try:
-                status = jarvis.send(text, ui)
+                status = jarvis.send(text, ui, spoken=spoken)
             except Exception as exc:
                 jarvis.log.record("error", detail=f"{type(exc).__name__}: {exc}")
                 ui._send({"type": "info", "text": f"Something went wrong: {type(exc).__name__}: {exc}"})
@@ -430,7 +486,7 @@ def create_app(jarvis: Jarvis, token: str | None = None, make_agent=None) -> Fas
                     if not busy.acquire(blocking=False):
                         await ws.send_json({"type": "info", "text": "One moment: still working on the previous request."})
                         continue
-                    threading.Thread(target=work, args=(text,), daemon=True).start()
+                    threading.Thread(target=work, args=(text, msg.get("spoken") is True), daemon=True).start()
         except WebSocketDisconnect:
             ui.cancel_all()
         finally:

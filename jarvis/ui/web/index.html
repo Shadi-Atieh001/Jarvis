@@ -164,6 +164,8 @@
   .msg code { font: 13px var(--mono); background: rgba(79, 216, 255, .10); border: 1px solid var(--line); padding: 0 5px; border-radius: 2px; }
   .msg.scheduled { border-left-color: var(--warn); }
   .msg.scheduled .label { color: var(--warn); margin-bottom: 6px; }
+  .msg.notice { color: var(--warn); font-size: 13px; border-left: 2px solid var(--warn); padding-left: 12px; }
+  .earlier { align-self: center; font: 600 10px/1 var(--hud); letter-spacing: .24em; text-transform: uppercase; color: var(--muted); padding: 6px 0; }
   .msg.info { color: var(--muted); font: 12.5px/1.5 var(--mono); border-left: 2px solid var(--line); padding-left: 12px; }
   .msg pre, .confirm pre {
     background: rgba(2, 6, 10, .85); border: 1px solid var(--line); border-radius: 2px;
@@ -250,6 +252,7 @@
   .choice b { display: block; font: 600 12px/1.2 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--text); margin-bottom: 4px; }
   .choice span { color: var(--muted); font-size: 13px; }
   .setting-title { margin: 18px 0 8px; }
+  #panel-body pre { background: rgba(2, 6, 10, .85); border: 1px solid var(--line); padding: 10px; font: 12px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 220px; overflow: auto; margin: 0 0 12px; }
   .log-line { font: 12px/1.5 var(--mono); padding: 6px 0; border-bottom: 1px solid rgba(79, 216, 255, .08); overflow-wrap: anywhere; color: var(--muted); }
   .log-line b { color: var(--text); font-weight: 500; }
   code.cmd { display: block; font: 12px var(--mono); background: rgba(2, 6, 10, .85); border: 1px solid var(--line); padding: 8px 10px; margin-top: 6px; color: var(--text); user-select: all; }
@@ -308,6 +311,11 @@
       <div class="gauge" id="g-memory"><div class="top"><span>Memory</span><b>—</b></div><div class="bar"><i></i></div></div>
       <div class="gauge" id="g-disk"><div class="top"><span>Disk</span><b>—</b></div><div class="bar"><i></i></div></div>
       <div class="gauge" id="g-power"><div class="top"><span>Power</span><b>—</b></div><div class="bar"><i></i></div></div>
+    </section>
+    <section class="widget">
+      <div class="label">Usage</div>
+      <div class="gauge" id="g-today" title="Tokens used today against the daily allowance"><div class="top"><span>Today</span><b>—</b></div><div class="bar"><i></i></div></div>
+      <div class="gauge" id="g-context" title="How large the current conversation is. It is condensed automatically when full."><div class="top"><span>Conversation</span><b>—</b></div><div class="bar"><i></i></div></div>
     </section>
     <section class="widget">
       <div class="label">Links</div>
@@ -489,6 +497,10 @@ function handle(m) {
     if (/stop engaged/i.test(m.text)) { halted = true; speech.stop(); }
     if (/stop cleared/i.test(m.text)) halted = false;
     refreshMode();
+  } else if (m.type === "notice") {
+    current = null;
+    add(el("div", "msg notice", m.text));
+    refreshWidgets();
   } else if (m.type === "scheduled") {
     // A reminder or scheduled task has fired. Show it, and say it aloud.
     const block = add(el("div", "msg jarvis scheduled"));
@@ -505,6 +517,7 @@ function handle(m) {
     if (m.status === "stopped") { halted = true; speech.stop(); }
     if (m.status !== "done") followUpDue = false;
     refreshMode();
+    refreshWidgets();
     maybeFollowUp();
   }
 }
@@ -552,7 +565,7 @@ function submit(text, spoken) {
   const isCommand = text.startsWith("/");
   if (busy && !isCommand) return false;
   add(el("div", "msg user" + (spoken ? " spoken" : ""), text));
-  ws.send(JSON.stringify({ type: "user", text }));
+  ws.send(JSON.stringify({ type: "user", text, spoken: !!spoken }));
   if (!isCommand) {
     current = null; busy = true;
     speech.stop();
@@ -991,9 +1004,49 @@ const panel = {
     return out;
   },
 
+  updateBlock() {
+    const box = el("div"), status = el("p", "", "Checking for a newer version…"), actions = el("div", "panel-actions");
+    box.append(el("div", "label setting-title", "Version and updates"), status, actions);
+    const fail = (err) => { status.textContent = "Could not check: " + err.message; };
+    const restartButton = () => {
+      const again = el("button", "small-btn", "Restart JARVIS now");
+      again.onclick = async () => {
+        again.disabled = true; again.textContent = "Restarting…";
+        try { await api("/api/restart", { method: "POST" }); } catch (err) { status.textContent = err.message; }
+      };
+      return again;
+    };
+    this.json("/api/update").then((info) => {
+      if (!info.behind) { status.textContent = `You have the latest version (${info.version}).`; return; }
+      status.textContent = `Version ${info.version} is installed. ${info.behind} update${info.behind > 1 ? "s are" : " is"} available:`;
+      const list = el("div");
+      info.changes.forEach((line) => list.appendChild(el("div", "log-line", "• " + line)));
+      box.insertBefore(list, actions);
+      if (info.local_changes.length) {
+        box.insertBefore(el("p", "", "Note: these files in the Jarvis folder have been edited, which may block the update: " + info.local_changes.join(", ")), actions);
+      }
+      const go = el("button", "small-btn", "Update now");
+      go.onclick = async () => {
+        go.disabled = true; go.textContent = "Updating… this can take a few minutes";
+        try {
+          const done = await this.json("/api/update", { method: "POST" });
+          list.remove();
+          status.textContent = done.changed ? "Updated. Restart JARVIS to use the new version." : "Already up to date.";
+          actions.replaceChildren(done.can_restart ? restartButton() : el("span", "label", "Close JARVIS and open it again"));
+        } catch (err) {
+          status.textContent = "The update did not go through. Nothing was changed.";
+          box.insertBefore(el("pre", "", err.message), actions);
+          go.disabled = false; go.textContent = "Try again";
+        }
+      };
+      actions.appendChild(go);
+    }).catch(fail);
+    return box;
+  },
+
   async settings() {
     const current = await this.json("/api/settings");
-    const out = [];
+    const out = [this.updateBlock()];
     const group = (title, key, options) => {
       out.push(el("div", "label setting-title", title));
       for (const [value, name, description] of options) {
@@ -1194,6 +1247,12 @@ async function refreshWidgets() {
   else setGauge("g-power", 1, "mains");
   $("g-power").classList.toggle("hot", !!s.battery && !s.battery.plugged && s.battery.percent < 20);
 
+  const u = s.usage, short = (n) => n >= 1e6 ? (n / 1e6).toFixed(2) + "M" : n >= 1e4 ? Math.round(n / 1e3) + "k" : n >= 1e3 ? (n / 1e3).toFixed(1) + "k" : String(n);
+  setGauge("g-today", u.limit ? u.used / u.limit : null, u.limit ? `${short(u.used)} / ${short(u.limit)}` : short(u.used));
+  $("g-today").classList.toggle("hot", !!u.limit && u.used / u.limit > 0.8);
+  setGauge("g-context", u.context / u.context_budget, u.context ? `${short(u.context)} / ${short(u.context_budget)}` : "new");
+  $("g-context").classList.remove("hot");
+
   $("w-accounts").replaceChildren(...s.accounts.map((a) => el("span", "dot" + (a.connected ? " on" : ""), a.label)));
   const next = $("w-next");
   next.replaceChildren();
@@ -1256,7 +1315,26 @@ api("/api/info").then((r) => r.json()).then((data) => {
   }
 }).catch(() => { $("r-voice").textContent = "UNKNOWN"; });
 
-connect();
+// Redraw the conversation from before JARVIS was last closed, then connect.
+function showEarlier(items) {
+  for (const item of items) {
+    if (item.type === "user") add(el("div", "msg user" + (item.spoken ? " spoken" : ""), item.text));
+    else if (item.type === "reply") render(add(el("div", "msg jarvis")), item.text.trim());
+    else if (item.type === "notice") add(el("div", "msg notice", item.text));
+    else if (item.type === "tool") {
+      const row = el("div", "tool");
+      row.appendChild(el("b", item.decision, item.decision));
+      row.appendChild(document.createTextNode(`  ${item.name}: ${item.summary}`));
+      add(row);
+    } else if (item.type === "scheduled") {
+      const block = add(el("div", "msg jarvis scheduled"));
+      block.appendChild(el("div", "label", "Scheduled · " + item.title));
+      render(block.appendChild(el("div")), item.text);
+    }
+  }
+  if (items.length) add(el("div", "earlier", "— earlier conversation above —"));
+}
+api("/api/conversation").then((r) => r.json()).then((data) => showEarlier(data.items)).catch(() => {}).finally(connect);
 </script>
 </body>
 </html>
