@@ -34,6 +34,8 @@ class Settings:
     ollama_context_window: int = 8192
     ollama_think: bool = False
 
+    approved_sites: list = field(default_factory=list)  # websites where JARVIS may act without asking
+    always_ask_sites: list = field(default_factory=list)  # patterns for sites that always ask (banking, payment)
     launcher: list = field(default_factory=list)  # quick-launch buttons: {"label", "open"}
     memory_enabled: bool = True
     voice_enabled: bool = True
@@ -105,6 +107,9 @@ def load_settings(path: Path | None = None) -> Settings:
     s.ollama_keep_alive = ollama.get("keep_alive", s.ollama_keep_alive)
 
     s.memory_enabled = data.get("memory", {}).get("enabled", s.memory_enabled)
+    browser = data.get("browser", {})
+    s.approved_sites = [str(x).lower() for x in browser.get("approved_sites", [])]
+    s.always_ask_sites = [str(x) for x in browser.get("always_ask", [])]
     s.launcher = [
         {"label": str(i["label"]), "open": str(i["open"])}
         for i in data.get("launcher", {}).get("items", [])
@@ -193,6 +198,35 @@ def save_profile(s: Settings, values: dict) -> None:
         setattr(s, PROFILE[key], value)
 
 
+def _valid_site(site) -> bool:
+    import re
+
+    return isinstance(site, str) and bool(re.fullmatch(r"[a-z0-9.-]{3,200}", site)) and "." in site
+
+
+def set_site_approval(s: Settings, site: str, approved: bool) -> None:
+    """Add or remove a website from the approved list, now and for next time."""
+    import json
+
+    site = site.strip().lower()
+    if not _valid_site(site):
+        raise ValueError(f"{site!r} is not a website name.")
+    path = overrides_path(s)
+    try:
+        saved = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(saved, dict):
+            saved = {}
+    except (OSError, ValueError):
+        saved = {}
+    sites = [x for x in saved.get("approved_sites", []) if _valid_site(x) and x != site]
+    s.approved_sites = [x for x in s.approved_sites if x != site]
+    if approved:
+        sites.append(site)
+        s.approved_sites.append(site)
+    saved["approved_sites"] = sites
+    path.write_text(json.dumps(saved, indent=2), encoding="utf-8")
+
+
 def overrides_path(s: Settings) -> Path:
     return s.home / "overrides.json"
 
@@ -209,6 +243,10 @@ def apply_overrides(s: Settings) -> None:
             setattr(s, key, value)
         elif key in PROFILE and _valid_profile_value(key, value):
             setattr(s, PROFILE[key], value.strip())
+        elif key == "approved_sites" and isinstance(value, list):
+            for site in value:
+                if _valid_site(site) and site not in s.approved_sites:
+                    s.approved_sites.append(site)
 
 
 def save_override(s: Settings, key: str, value) -> None:

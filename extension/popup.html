@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  body { width: 300px; margin: 0; padding: 14px; background: #04090e; color: #d6f6fb; font: 13px/1.5 "Segoe UI", system-ui, sans-serif; }
+  h1 { margin: 0 0 8px; font-size: 14px; letter-spacing: .3em; color: #19e3f5; }
+  #status { font-weight: 600; margin-bottom: 10px; }
+  #status.good { color: #5dffb0; } #status.bad { color: #ffb347; }
+  p { margin: 0 0 8px; color: #7fb0bb; }
+  input { width: 100%; box-sizing: border-box; background: #000508; color: #d6f6fb; border: 1px solid #19e3f5; padding: 7px; font: 12px Consolas, monospace; }
+  button { margin-top: 8px; width: 100%; padding: 8px; background: #19e3f5; color: #00181c; border: 0; font-weight: 700; letter-spacing: .1em; cursor: pointer; }
+</style>
+</head>
+<body>
+  <h1>JARVIS</h1>
+  <div id="status">Checking…</div>
+  <p>Pairing code, from the JARVIS window: CONTROL &gt; Accounts &gt; Browser.</p>
+  <input id="code" type="password" placeholder="Paste the pairing code" aria-label="Pairing code">
+  <button id="save">Save</button>
+  <script src="popup.js"></script>
+</body>
+</html>

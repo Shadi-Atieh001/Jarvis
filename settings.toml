@@ -72,6 +72,20 @@ model = "IFM/K2-Horizon-375B-A23B"
 # itself. Store the key with:  setx JARVIS_API_KEY "your-key-here"
 api_key_env = "JARVIS_API_KEY"
 
+[browser]
+# For the JARVIS extension in Chrome or Edge. On an approved website JARVIS
+# may click and type without asking; anywhere else it asks first. Approve a
+# site from the permission prompt ("Yes, and always on this site") or list
+# it here, e.g. approved_sites = ["web.whatsapp.com"].
+approved_sites = []
+# Websites matching any of these (case-insensitive regex, tested against the
+# whole address) ALWAYS ask before JARVIS acts, even if approved.
+always_ask = [
+    'bank', 'paypal', 'stripe\.com', 'wise\.com', 'revolut', 'payoneer', 'venmo', 'cash\.app',
+    'binance', 'coinbase', 'kraken\.com', 'crypto', 'wallet', 'broker', 'trading',
+    'checkout', 'payment', 'billing', '/pay(/|$|\?)', 'purchase', '/cart',
+]
+
 [sight]
 # Let JARVIS look at your screen when you ask it to. Each look sends one
 # picture to Google Gemini (connect with: python -m jarvis connect gemini).

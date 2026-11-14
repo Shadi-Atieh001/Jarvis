@@ -184,7 +184,7 @@
   .confirm h2 { font: 700 12px/1 var(--mono); letter-spacing: .2em; text-transform: uppercase; margin: 0 0 8px; color: var(--warn); }
   .confirm .why { color: var(--muted); font-size: 13px; margin-bottom: 4px; }
   .confirm pre { max-height: 300px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
-  .confirm .row { display: flex; gap: 10px; margin-top: 10px; }
+  .confirm .row { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
   .confirm .row button {
     font: 700 12px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase;
     padding: 10px 18px; border: 1px solid var(--line-strong); border-radius: 2px;
@@ -606,16 +606,23 @@ function showConfirm(m) {
   const row = el("div", "row");
   const yes = el("button", "yes", "Yes, proceed");
   const no = el("button", "no", "No");
-  const answer = (approved) => {
-    ws.send(JSON.stringify({ type: "confirm_reply", id: m.id, approved }));
+  const answer = (approved, approveSite) => {
+    ws.send(JSON.stringify({ type: "confirm_reply", id: m.id, approved, approve_site: !!approveSite }));
     card.classList.add("answered");
-    row.replaceWith(el("div", "verdict", approved ? "You approved this." : "You refused this."));
+    row.replaceWith(el("div", "verdict", approveSite ? `You approved this, and ${m.offer_site} from now on.` : approved ? "You approved this." : "You refused this."));
     awaitingApproval = Math.max(0, awaitingApproval - 1); refreshMode();
     input.focus();
   };
   yes.onclick = () => answer(true);
   no.onclick = () => answer(false);
   row.append(yes, no);
+  if (m.offer_site) {
+    // Only offered when the sole reason for asking is an unapproved site.
+    const always = el("button", "yes", `Yes, and always on ${m.offer_site}`);
+    always.title = "JARVIS will click and type on this site without asking. Sending, buying and deleting still ask.";
+    always.onclick = () => answer(true, true);
+    row.insertBefore(always, no);
+  }
   card.appendChild(row);
   add(card);
   no.focus();  // the safe choice is the default
@@ -1104,9 +1111,60 @@ const panel = {
     return out;
   },
 
+  async browserSection() {
+    const b = await this.json("/api/browser");
+    const row = el("div", "row"), text = el("div", "grow", "Browser (Chrome or Edge)");
+    row.append(el("span", "tag" + (b.connected ? " good" : ""), b.connected ? "Connected" : "Not connected"), text);
+    if (!b.connected) {
+      text.appendChild(el("small", "", "Lets JARVIS read and work web pages in your own browser. To set up, once:"));
+      [
+        "1. In Chrome or Edge, open the Extensions page and switch on Developer mode.",
+        "2. Click \"Load unpacked\" and choose this folder:",
+      ].forEach((line) => text.appendChild(el("small", "", line)));
+      text.appendChild(el("code", "cmd", b.extension_folder));
+      text.appendChild(el("small", "", "3. Click the JARVIS icon in the browser's toolbar and paste this pairing code:"));
+    } else {
+      text.appendChild(el("small", "", "The extension is paired and connected. Pairing code, if you need it for another browser:"));
+    }
+    const code = el("code", "cmd", "•••••••• (click to show)");
+    code.style.cursor = "pointer";
+    code.onclick = () => { code.textContent = b.code; };
+    text.appendChild(code);
+
+    text.appendChild(el("small", "", "Approved sites: JARVIS clicks and types on these without asking. Sending, buying and deleting always ask, as do banking and payment sites."));
+    const sites = el("div");
+    for (const site of b.approved_sites) {
+      const line = el("div", "panel-actions");
+      line.style.margin = "4px 0";
+      const remove = el("button", "small-btn danger", "Remove");
+      remove.onclick = async () => {
+        await api("/api/browser/sites", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ site, approved: false }) });
+        this.show("accounts");
+      };
+      line.append(el("span", "", site), remove);
+      sites.appendChild(line);
+    }
+    if (!b.approved_sites.length) sites.appendChild(el("small", "", "None yet. Approve one from a permission prompt, or add it here."));
+    text.appendChild(sites);
+    const form = el("form", "connect-form"), input = el("input"), add = el("button", "small-btn", "Approve this site");
+    input.placeholder = "e.g. web.whatsapp.com"; input.setAttribute("aria-label", "Website to approve"); add.type = "submit";
+    const note = el("div", "note");
+    form.append(input, add, note);
+    form.onsubmit = async (event) => {
+      event.preventDefault();
+      const site = input.value.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+      try {
+        await api("/api/browser/sites", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ site, approved: true }) });
+        this.show("accounts");
+      } catch (err) { note.textContent = err.message; }
+    };
+    text.appendChild(form);
+    return row;
+  },
+
   async accounts() {
     const data = await this.json("/api/connections");
-    const out = [el("p", "", "Sign-in tokens are kept in Windows Credential Manager, never in a file.")];
+    const out = [el("p", "", "Sign-in tokens are kept in Windows Credential Manager, never in a file."), await this.browserSection()];
     for (const c of data.connections) {
       const row = el("div", "row"), text = el("div", "grow", c.label);
       if (c.connected) {
@@ -1273,7 +1331,7 @@ function segmentFor(tool) {
   if (/^notion_/.test(tool)) return 10;
   if (/^schedule_|^weather$/.test(tool)) return 11;
   if (/^(remember|recall|forget)$/.test(tool)) return 5;
-  if (/^(web_search|read_page|open_url)$/.test(tool)) return 3;
+  if (/^(web_search|read_page|open_url)$|^browser_/.test(tool)) return 3;
   if (/^(list_windows|read_screen|look_at_screen|open_app|focus_window|click|type_text|press_keys)$/.test(tool)) return 4;
   if (tool === "run_command") return 1;
   if (tool === "run_python") return 2;

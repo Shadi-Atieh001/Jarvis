@@ -21,6 +21,7 @@ and the screen control are Windows-only.
 - [Running](#running)
 - [Conversations, tokens and updates](#conversations-tokens-and-updates)
 - [The window](#the-window) and [the control panel](#the-control-panel)
+- [JARVIS in your browser](#jarvis-in-your-browser)
 - [Sight](#sight)
 - [Voice](#voice)
 - [Memory](#memory)
@@ -41,6 +42,7 @@ and the screen control are Windows-only.
 | Documents | read PDF, Word, PowerPoint and Excel files |
 | Commands and code | run PowerShell commands; write and run Python in the workspace |
 | Web | search the web, read a page's text, open a page in your browser |
+| Browser | in your own Chrome or Edge: list tabs, open, read, click, type, choose, scroll |
 | Screen | list open windows, read what is in a window, open apps |
 | Sight | look at the screen or the window in front, when asked |
 | Mouse and keyboard | click, type, press key combinations |
@@ -397,6 +399,67 @@ to return to what `settings.toml` says. JARVIS itself needs your approval
 to write to either file, so it cannot quietly loosen its own permissions
 through its file tools.
 
+## JARVIS in your browser
+
+A browser extension lets JARVIS read and work web pages inside your own
+Chrome or Edge. Because it is your real browser, JARVIS sees what you see,
+including sites you are signed in to: a university portal, WhatsApp Web, an
+order page. It reads a page as text, with every link, button and field
+numbered, and clicks or types by number. That is far quicker and more
+dependable than working the browser window from outside.
+
+**Installing the extension (once).**
+
+1. In Chrome or Edge, open the Extensions page (`chrome://extensions` or
+   `edge://extensions`) and switch on **Developer mode**.
+2. Click **Load unpacked** and choose the `extension` folder inside the
+   Jarvis folder.
+3. Click the JARVIS icon in the browser's toolbar (it may be under the
+   puzzle-piece menu) and paste the **pairing code** shown in the JARVIS
+   window under CONTROL > Accounts > Browser.
+
+The popup then says "Connected to JARVIS", and the Links widget in the
+window shows Browser lit. The extension talks only to JARVIS on your own
+computer, never to anything on the internet, and does nothing until paired.
+Chrome may occasionally remind you that a developer-mode extension is
+installed; that is expected for an extension not from the store.
+
+**What it may do without asking** (in Trusted mode):
+
+| Action | Rule |
+|---|---|
+| List tabs, open a page, read a page, scroll | Never asks |
+| Click or type on an **approved site** | Does not ask |
+| Click or type on any other site | Asks, and offers "Yes, and always on this site" |
+| Anything that looks like sending, posting, buying or deleting | Always asks, even on an approved site |
+| Any action on a banking or payment site | Always asks, even if approved |
+| Typing into a password field, or typing card details | Never, in any mode |
+
+Approved sites are listed, and can be added or removed, under CONTROL >
+Accounts > Browser. Approving `example.com` also covers `shop.example.com`.
+In Careful mode every click and keystroke asks; in Unrestricted mode
+nothing asks, though passwords and card details remain blocked.
+
+Things to understand about these rules:
+
+- **"Looks like sending" is a judgment from the button's wording** (Send,
+  Post, Pay, Buy, Order, Delete, Confirm, Submit and similar) and from
+  pressing Enter anywhere but a search box. It will sometimes ask when it
+  need not, and a button with unusual wording could slip past it. On a site
+  you have approved, JARVIS is acting as you; approve sites accordingly.
+- **Banking and payment sites are recognised by their address**, using the
+  patterns under `[browser] always_ask` in `settings.toml`. Add your own
+  bank's address there if its name is not caught.
+- **What a page says is untrusted.** After JARVIS reads a page, its other
+  tools (files, commands, email) ask before acting for the rest of that
+  request, as with any web content.
+- **Passwords and one-time codes are yours to type.** JARVIS will ask you to.
+
+Limits: it reads the main page only, not content inside embedded frames;
+some unusual sites build their controls in ways it cannot see, and for
+those JARVIS falls back to [Sight](#sight) and the screen tools; and it
+needs JARVIS to be on its usual address (port 47821).
+
 ## Sight
 
 JARVIS can look at your screen when you ask: "look at my screen", "what's
@@ -410,11 +473,16 @@ eyes: Google's Gemini. To set it up, get a free API key at
 <https://aistudio.google.com/apikey> and paste it under CONTROL > Accounts
 > Gemini (or run `python -m jarvis connect gemini`).
 
-- **It looks only when a request asks it to.** It never watches, and never
-  looks on its own initiative.
+- **It looks when you ask, and also on its own judgment** when seeing the
+  screen would help with what you asked: when you refer to something on
+  it, when it cannot read an app as text, or to check that something it did
+  worked. It never watches continuously; each look is one picture.
 - **The eye button** beside the microphone switches sight off completely.
   While it is off, a look is refused by JARVIS itself, whatever the model
   wants.
+- **Each look sends a picture to Google**, and since JARVIS may look
+  without being asked, that can happen during any request. Switch sight off
+  with the eye button when something private is on screen.
 - **The picture leaves your computer.** It is sent to Google. On Gemini's
   free tier, Google's terms say it may use what you send to improve its
   products, and that people may review it. Whatever is visible is in the
@@ -422,7 +490,8 @@ eyes: Google's Gemini. To set it up, get a free API key at
   rather than the whole screen.
 - **You can see what was sent.** The latest picture is kept at
   `~/.jarvis/last_look.jpg`, and every look is in the action log.
-- In Careful mode, each look asks for your approval first.
+- In Careful mode, each look asks for your approval first. In Trusted mode
+  it does not.
 - For working an app's buttons and fields, JARVIS still uses the screen
   reader method described under [What JARVIS can do](#what-jarvis-can-do),
   which is faster and sends nothing anywhere. Sight is for what that cannot
@@ -779,8 +848,12 @@ and anything that looks like a password or token are removed before writing.
   and the results of its tools.
 - **To the services you connect**: only the requests needed to do what you
   asked (Google, Spotify, GitHub, Notion).
-- **To Google Gemini, when you ask JARVIS to look**: one picture of your
-  screen or of the window in front, with your question. See [Sight](#sight).
+- **To Google Gemini, whenever JARVIS looks at the screen**: one picture of
+  your screen or of the window in front, with a question. With sight on,
+  JARVIS may look on its own judgment. See [Sight](#sight).
+- **From your browser**: with the extension, the text of pages JARVIS reads
+  in your browser, including pages you are signed in to, goes to the model
+  provider like anything else it reads.
 - **To public services, without an account**: web searches go to public
   search engines, and the weather widget and tool ask Open-Meteo about your
   configured location.
@@ -816,7 +889,7 @@ jarvis/
                      Notion (tokens.py)
   tools/             one file per group of tools: files, shell, code, web,
                      documents, desktop, memory, schedule, weather, google,
-                     spotify, github, notion, sight
+                     spotify, github, notion, sight, browser
   ui/
     terminal.py      terminal chat
     server.py        local server behind the window
@@ -824,6 +897,7 @@ jarvis/
     shortcut.py      the desktop and Start menu shortcut
     web/index.html   the interface (one file: markup, styles and script)
     web/jarvis.ico   the icon
+extension/           the browser extension (load it into Chrome or Edge)
 installer/           the one-file installer and the script it runs
 docs/screenshot.png  the picture at the top of this file
 tests/               one file per area; no test needs the network or an account
@@ -914,6 +988,7 @@ for it, add its name to `segmentFor` in `index.html`.
 Everything in the original plan is built: the core, memory, the
 integrations, scheduling and voice. Ideas not yet done:
 
-- WhatsApp, which today works only by controlling WhatsApp Web on screen.
+- A proper WhatsApp connection (today it works through WhatsApp Web in
+  the browser extension).
 - Watching the screen over time (sight is one look per request for now).
 - A sandbox stronger than a folder (a container or virtual machine).

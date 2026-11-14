@@ -34,6 +34,7 @@ class ToolContext:
     kill: "KillSwitch"
     memory: Any = None  # the MemoryStore, for the memory tools
     schedule: Any = None  # the Schedule, for the scheduling tools (window only)
+    browser: Any = None  # the link to the Chrome extension, for the browser tools
 
     @property
     def workspace(self) -> Path:
@@ -91,6 +92,9 @@ class Tool:
     describe: Callable[[dict, ToolContext], str] | None = None
     # Optional: (args, ctx) -> text checked against the blocked patterns.
     blockable_text: Callable[[dict], str] | None = None
+    # True for tools that decide for themselves what is safe after untrusted
+    # content has been read (the browser tools, which use approved sites).
+    own_trust_rules: bool = False
 
     def api_definition(self) -> dict:
         return {
@@ -114,6 +118,7 @@ def tool(
     escalate=None,
     describe=None,
     blockable_text=None,
+    own_trust_rules: bool = False,
 ):
     """Register a function as a JARVIS tool."""
     if kind not in KINDS:
@@ -124,7 +129,8 @@ def tool(
     def decorator(func):
         # The loader finds tools by looking for this attribute.
         func.jarvis_tool = Tool(
-            name, description, input_schema, func, tier, read_only, kind, escalate, describe, blockable_text
+            name, description, input_schema, func, tier, read_only, kind, escalate, describe, blockable_text,
+            own_trust_rules,
         )
         return func
 

@@ -314,7 +314,7 @@ def test_status_feeds_the_widgets(make_jarvis, monkeypatch):
     s = c.get("/api/status", headers=HEADERS).json()
     assert s["disk"]["total_gb"] > 0 and 0 <= s["disk"]["used"] <= 1
     assert s["weather"] == {"place": "Sharjah", "temperature": 31, "conditions": "mainly clear", "low": 22, "high": 32}
-    assert {a["label"]: a["connected"] for a in s["accounts"]} == {"Google": True, "Spotify": False, "GitHub": False, "Notion": False, "Gemini": False}
+    assert {a["label"]: a["connected"] for a in s["accounts"]} == {"Google": True, "Spotify": False, "GitHub": False, "Notion": False, "Gemini": False, "Browser": False}
     assert s["next"]["title"] == BRIEFING_TITLE and s["launcher"] == ["Gmail"]
 
 

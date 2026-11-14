@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.14.0 — JARVIS in your browser; sight on its own judgment (2026-11-14)
+
+Added
+- A browser extension (`extension/`, for Chrome and Edge) and browser tools:
+  `browser_tabs`, `browser_open`, `browser_read`, `browser_scroll`,
+  `browser_click`, `browser_type`, `browser_select`, `browser_key`,
+  `browser_close`. JARVIS reads and works pages in your own browser,
+  including sites you are signed in to.
+- Approved sites: JARVIS acts freely on sites you approve and asks
+  elsewhere, with "Yes, and always on this site" in the prompt. Sending,
+  buying and deleting always ask; banking and payment sites always ask;
+  password fields and card details are never filled in.
+- CONTROL > Accounts > Browser: pairing code, setup steps, approved sites.
+
+Changed
+- Sight: JARVIS may now look at the screen on its own judgment when that
+  helps with a request, without being asked each time. The eye button still
+  switches sight off completely.
+
+Tested
+- The extension was loaded into a real Chromium and driven end to end
+  against a test website (read, type, choose, click, search, follow links,
+  refuse a password field). It has not been tried on real sites such as
+  WhatsApp Web, which build their pages in more complicated ways.
+
 ## 0.13.0 — Sight, a setup screen and an installer (2026-11-13)
 
 Added

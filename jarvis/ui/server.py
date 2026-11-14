@@ -33,6 +33,7 @@ from fastapi.responses import HTMLResponse, Response
 from jarvis.core import commands
 from jarvis.core.agent import Jarvis
 from jarvis.core.permissions import Decision
+from jarvis.integrations.browser import BrowserBridge
 from jarvis.scheduler.runner import Scheduler
 from jarvis.scheduler.store import describe_when
 from jarvis.voice.engine import Voice, VoiceUnavailable
@@ -76,6 +77,7 @@ class WebUI:
                 "tool": tool_name,
                 "reason": decision.reason,
                 "description": decision.description,
+                "offer_site": decision.offer_site,
             }
         )
         # Wait for the user, but give up at once on an emergency stop.
@@ -83,12 +85,23 @@ class WebUI:
             if self.jarvis.kill.tripped:
                 break
         self._pending.pop(request_id, None)
+        if answer[0] and len(answer) > 1 and decision.offer_site:
+            # "Yes, and always on this site."
+            from jarvis.core.config import set_site_approval
+
+            try:
+                set_site_approval(self.jarvis.settings, decision.offer_site, True)
+                self.jarvis.log.record("site", detail=f"{decision.offer_site} approved from a permission prompt")
+            except ValueError:
+                pass
         return answer[0]
 
-    def resolve(self, request_id: int, approved: bool) -> None:
+    def resolve(self, request_id: int, approved: bool, approve_site: bool = False) -> None:
         pending = self._pending.get(request_id)
         if pending:
             pending[1][0] = approved
+            if approved and approve_site:
+                pending[1].append("site")
             pending[0].set()
 
     def cancel_all(self) -> None:
@@ -104,6 +117,70 @@ def create_app(jarvis: Jarvis, token: str | None = None, make_agent=None) -> Fas
     app.state.windows = []  # the WebUI of each open window, newest last
     app.state.notify = None  # set by the tray icon: notify(title, text)
     app.state.restart = None  # set by the desktop window: restart()
+
+    # ---- the browser extension
+
+    bridge = BrowserBridge(jarvis.settings)
+    jarvis.ctx.browser = bridge
+    app.state.browser = bridge
+
+    @app.websocket("/ws/browser")
+    async def browser_endpoint(ws: WebSocket) -> None:
+        """The extension connects here. It must present the pairing code,
+        and must really be a browser extension (not a web page)."""
+        import hmac
+
+        origin = ws.headers.get("origin", "")
+        paired = hmac.compare_digest(ws.query_params.get("token", ""), bridge.code)
+        if not paired or not origin.startswith(("chrome-extension://", "moz-extension://")):
+            await ws.close(code=1008)
+            return
+        await ws.accept()
+        bridge.attach(ws, asyncio.get_running_loop())
+        jarvis.log.record("browser", detail="extension connected")
+
+        async def keep_awake() -> None:  # browsers put idle extensions to sleep
+            while True:
+                await asyncio.sleep(20)
+                await ws.send_json({"type": "ping"})
+
+        pinger = asyncio.create_task(keep_awake())
+        try:
+            while True:
+                message = await ws.receive_json()
+                if message.get("type") != "pong":
+                    bridge.on_message(message)
+        except (WebSocketDisconnect, RuntimeError):
+            pass
+        finally:
+            pinger.cancel()
+            bridge.detach(ws)
+            jarvis.log.record("browser", detail="extension disconnected")
+
+    @app.get("/api/browser")
+    def browser_state(request: Request) -> dict:
+        authorise(request)
+        from jarvis.core.config import REPO_ROOT
+
+        return {
+            "connected": bridge.connected,
+            "code": bridge.code,
+            "approved_sites": sorted(jarvis.settings.approved_sites),
+            "extension_folder": str(REPO_ROOT / "extension"),
+        }
+
+    @app.post("/api/browser/sites")
+    async def browser_site(request: Request) -> dict:
+        authorise(request)
+        from jarvis.core.config import set_site_approval
+
+        data = await request.json()
+        try:
+            set_site_approval(jarvis.settings, str(data.get("site", "")), data.get("approved") is not False)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+        jarvis.log.record("site", detail=f"{data.get('site')} {'approved' if data.get('approved') is not False else 'removed'} in the control panel")
+        return {"approved_sites": sorted(jarvis.settings.approved_sites)}
 
     # ---- scheduling: results go to the open window (and the tray, if any)
 
@@ -127,6 +204,7 @@ def create_app(jarvis: Jarvis, token: str | None = None, make_agent=None) -> Fas
     def scheduled_agent() -> Jarvis:
         agent = make_agent() if make_agent else Jarvis(jarvis.settings, jarvis.registry, jarvis.log, jarvis.kill)
         agent.ctx.schedule = scheduler.schedule
+        agent.ctx.browser = app.state.browser
         return agent
 
     scheduler = Scheduler(jarvis, deliver, ask, scheduled_agent)
@@ -164,6 +242,7 @@ def create_app(jarvis: Jarvis, token: str | None = None, make_agent=None) -> Fas
                 connected.append({"label": account.label, "connected": accounts.is_connected(account)})
             except Exception:
                 connected.append({"label": account.label, "connected": False})
+        connected.append({"label": "Browser", "connected": bridge.connected})
         upcoming = sorted((i for i in scheduler.schedule.items() if i.get("next")), key=lambda i: i["next"])
         allowance = jarvis.allowance()
         result.update(
@@ -564,7 +643,7 @@ def create_app(jarvis: Jarvis, token: str | None = None, make_agent=None) -> Fas
                     await ws.send_json({"type": "info", "text": "Emergency stop engaged. Type /resume to clear it."})
 
                 elif kind == "confirm_reply":
-                    ui.resolve(int(msg.get("id", 0)), msg.get("approved") is True)
+                    ui.resolve(int(msg.get("id", 0)), msg.get("approved") is True, msg.get("approve_site") is True)
 
                 elif kind == "user":
                     text = str(msg.get("text", "")).strip()

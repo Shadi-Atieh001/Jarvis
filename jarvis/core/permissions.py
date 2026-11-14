@@ -40,6 +40,9 @@ class Decision:
     tier: str
     reason: str  # why this tier, shown to the user and logged
     description: str  # exactly what will happen
+    # Set when the only reason for asking is that a website is not yet
+    # approved: the window then offers "Yes, and always on this site".
+    offer_site: str | None = None
 
 
 class PermissionGate:
@@ -69,13 +72,14 @@ class PermissionGate:
             reason = f'{tool.name} is "{tier}" by default'
         elif mode == "trusted":
             tier = CONFIRM if tool.kind in ("delete", "send") else AUTO
-            reason = f'"{tool.kind}" actions ask first in trusted mode'
+            reason = f'"{tool.kind}" actions {"ask first" if tier == CONFIRM else "run without asking"} in trusted mode'
         else:  # unrestricted
             tier, reason = AUTO, "unrestricted mode"
         if tier not in TIER_ORDER:
             # A typo in settings.toml must fail safe, not open.
             tier, reason = CONFIRM, f"settings.toml has an unknown tier {tier!r}"
 
+        offer_site = None
         # 2. The tool's own view of this particular call.
         if tool.escalate is not None:
             strict = True
@@ -84,6 +88,8 @@ class PermissionGate:
                 why = "this particular call is riskier than usual"
                 if isinstance(raised, tuple):
                     strict = len(raised) > 2 and raised[2] == "strict"
+                    if len(raised) > 3 and isinstance(raised[3], dict):
+                        offer_site = raised[3].get("offer_site")
                     raised, why = raised[0], raised[1]
             except Exception as exc:  # a broken hook must fail safe
                 raised, why = CONFIRM, f"could not assess the risk ({exc})"
@@ -94,9 +100,11 @@ class PermissionGate:
             )
             if applies and raised in TIER_ORDER and TIER_ORDER[raised] > TIER_ORDER[tier]:
                 tier, reason = raised, why
+            else:
+                offer_site = None
 
         # 3. Untrusted content read earlier in this request.
-        if self.tainted and self.settings.confirm_after_untrusted and tier == AUTO:
+        if self.tainted and self.settings.confirm_after_untrusted and tier == AUTO and not tool.own_trust_rules:
             if mode == "careful" and not tool.read_only:
                 tier, reason = CONFIRM, "untrusted content was read earlier in this request"
             elif mode == "trusted" and tool.kind not in ("read", "launch"):
@@ -111,7 +119,7 @@ class PermissionGate:
                     reason = f"matches blocked pattern {pattern.pattern!r}"
                     break
 
-        return Decision(tier, reason, description)
+        return Decision(tier, reason, description, offer_site if tier == CONFIRM else None)
 
     @staticmethod
     def _describe(tool: Tool, args: dict, ctx: ToolContext) -> str:

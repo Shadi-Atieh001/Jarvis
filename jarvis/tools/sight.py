@@ -6,8 +6,10 @@ the window in front), sends that picture to Google's Gemini with your
 question, and passes Gemini's answer back to the main model as text.
 
 What you should know:
-  * It looks only when a request asks it to, and never while sight is
-    switched off (the eye button in the window).
+  * It looks when you ask, and also on its own judgment when seeing the
+    screen would help with what you asked. It never looks while sight is
+    switched off (the eye button in the window), and it does not watch
+    continuously: each look is one picture.
   * The picture leaves your computer: it goes to Google. On Gemini's free
     tier, Google may use it to improve its products and people may review
     it. Whatever is visible is included, so close anything private first.
@@ -182,9 +184,10 @@ def _describe(args: dict, ctx: ToolContext) -> str:
     description=(
         "See the user's screen: take one picture and get an answer about what it shows (images, charts, video "
         "frames, layouts, error dialogs, anything visual). 'target' is 'window' for the window in front, or "
-        "'screen' for everything on screen. Use this ONLY when the user's current request asks you to look at, "
-        "see, or check their screen; never on your own initiative. To operate an app, prefer read_screen, which "
-        "gives clickable element numbers; use this when you need to see what something looks like."
+        "'screen' for everything on screen. Use it whenever seeing the screen would help you do what the user "
+        "asked: when they refer to something on it, when read_screen comes back empty or unclear, or to check "
+        "the result of something you did. To operate an app, still prefer read_screen, which gives clickable "
+        "element numbers. One look per need; do not look repeatedly without reason."
     ),
     input_schema={
         "type": "object",
