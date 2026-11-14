@@ -48,6 +48,24 @@ class DesktopUnavailable(Exception):
 
 # The most recent read_screen result, so "click element 12" can find it.
 _last_snapshot: list[Element] = []
+_last_app: str | None = None  # the app that snapshot was of
+
+
+def _app_for_click(args: dict, ctx: ToolContext) -> str | None:
+    """Which app a click would land in: the one last read (for a click by
+    element number), otherwise whichever is in front."""
+    if args.get("element") is not None and _last_app:
+        return _last_app
+    return _front_app(args, ctx)
+
+
+def _front_app(args: dict, ctx: ToolContext) -> str | None:
+    """The app in front, which is where typing and key presses go."""
+    try:
+        find = getattr(_backend(), "front_app", None)
+        return find() if find else None
+    except Exception:
+        return None
 _backend_instance = None
 
 
@@ -104,12 +122,13 @@ def list_windows(args: dict, ctx: ToolContext) -> ToolResult:
     describe=lambda a, c: f"Read the contents of {a.get('window') or 'the window in front'}",
 )
 def read_screen(args: dict, ctx: ToolContext) -> ToolResult:
-    global _last_snapshot
+    global _last_snapshot, _last_app
     try:
         title, elements = _backend().snapshot(args.get("window"))
     except DesktopUnavailable as exc:
         return _unavailable(exc)
     _last_snapshot = elements[:MAX_ELEMENTS]
+    _last_app = getattr(_backend(), "last_app", None)
     lines = [f'Window: "{title}"']
     for number, e in enumerate(_last_snapshot, 1):
         line = f"[{number}] {e.role}"
@@ -251,6 +270,7 @@ def focus_window(args: dict, ctx: ToolContext) -> ToolResult:
     },
     tier=AUTO,
     kind="control",
+    target_app=_app_for_click,
     describe=lambda a, c: _describe_click(a),
 )
 def click(args: dict, ctx: ToolContext) -> ToolResult:
@@ -329,6 +349,7 @@ def _escalate_typing(args: dict, ctx: ToolContext):
     },
     tier=AUTO,
     kind="control",
+    target_app=_front_app,
     escalate=_escalate_typing,
     describe=lambda a, c: f"Type this text{' and press Enter' if a.get('press_enter') else ''}:\n\n{a['text']}",
 )
@@ -341,7 +362,12 @@ def type_text(args: dict, ctx: ToolContext) -> ToolResult:
     except DesktopUnavailable as exc:
         return _unavailable(exc)
     time.sleep(0.3)
-    return ToolResult(f"Typed {len(args['text'])} characters{' and pressed Enter' if args.get('press_enter') else ''}.")
+    if args.get("press_enter"):
+        return ToolResult(
+            f"Typed {len(args['text'])} characters and pressed Enter. In a chat or message box, Enter SENDS: the "
+            "message has gone and the box is now empty, which is normal. Do not type it again."
+        )
+    return ToolResult(f"Typed {len(args['text'])} characters.")
 
 
 @tool(
@@ -358,6 +384,7 @@ def type_text(args: dict, ctx: ToolContext) -> ToolResult:
     },
     tier=AUTO,
     kind="control",
+    target_app=_front_app,
     describe=lambda a, c: f"Press {a['keys']}",
 )
 def press_keys(args: dict, ctx: ToolContext) -> ToolResult:
@@ -434,6 +461,7 @@ class WindowsBackend:
     """Everything that talks to Windows, via the pywinauto library."""
 
     def __init__(self):
+        self.last_app: str | None = None  # the app of the latest snapshot
         try:
             import pywinauto  # noqa: F401
         except ImportError:
@@ -478,6 +506,26 @@ class WindowsBackend:
             raise DesktopUnavailable(f"No open window has {title!r} in its title. Open windows: {names}")
         return min(matches, key=lambda w: len(w.window_text()))
 
+    def _app_of(self, window) -> str | None:
+        """A name for the program a window belongs to, e.g. 'WhatsApp.exe'.
+        Store apps all run inside one host program, so for those the
+        window's title is added: 'ApplicationFrameHost.exe|Calculator'."""
+        try:
+            import psutil
+
+            name = psutil.Process(window.process_id()).name()
+        except Exception:
+            return None
+        if name.lower() == "applicationframehost.exe":
+            return f"{name}|{window.window_text().strip()}"
+        return name
+
+    def front_app(self) -> str | None:
+        try:
+            return self._app_of(self._find(None))
+        except DesktopUnavailable:
+            return None
+
     def windows(self) -> list[str]:
         windows = self._visible_windows()
         handle = self._foreground_handle()
@@ -486,6 +534,7 @@ class WindowsBackend:
 
     def snapshot(self, title: str | None) -> tuple[str, list[Element]]:
         window = self._find(title)
+        self.last_app = self._app_of(window)
         info = window.element_info
         walker = info.iter_descendants() if hasattr(info, "iter_descendants") else iter(info.descendants())
         elements: list[Element] = []

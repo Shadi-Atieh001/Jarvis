@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.15.0 — One approval per site or app (2026-11-14)
+
+Changed
+- An approved website is now approved for everything: on it, JARVIS no
+  longer asks before sending, posting, submitting or deleting. Unapproved
+  sites ask once, with "Yes, and always on this site". Banking and payment
+  sites still ask every time, and passwords and card details are still
+  never entered.
+- Desktop apps can be approved the same way. Clicking and typing in an app
+  after reading web content asks once, with "Yes, and always in <app>";
+  after that it does not ask there. Browsers cannot be approved as apps.
+- After typing with Enter, JARVIS is told plainly that a chat message has
+  been sent and that an empty box is normal, so it does not send the same
+  message twice.
+
+Not yet verified
+- Working out which program a window belongs to is Windows-only code. If
+  it cannot tell, JARVIS simply asks each time, as before.
+
 ## 0.14.1 — Browser extension connection fixes (2026-11-14)
 
 Fixed

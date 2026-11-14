@@ -609,17 +609,18 @@ function showConfirm(m) {
   const answer = (approved, approveSite) => {
     ws.send(JSON.stringify({ type: "confirm_reply", id: m.id, approved, approve_site: !!approveSite }));
     card.classList.add("answered");
-    row.replaceWith(el("div", "verdict", approveSite ? `You approved this, and ${m.offer_site} from now on.` : approved ? "You approved this." : "You refused this."));
+    const target = m.offer_site || m.offer_app_label;
+    row.replaceWith(el("div", "verdict", approveSite ? `You approved this, and ${target} from now on.` : approved ? "You approved this." : "You refused this."));
     awaitingApproval = Math.max(0, awaitingApproval - 1); refreshMode();
     input.focus();
   };
   yes.onclick = () => answer(true);
   no.onclick = () => answer(false);
   row.append(yes, no);
-  if (m.offer_site) {
-    // Only offered when the sole reason for asking is an unapproved site.
-    const always = el("button", "yes", `Yes, and always on ${m.offer_site}`);
-    always.title = "JARVIS will click and type on this site without asking. Sending, buying and deleting still ask.";
+  if (m.offer_site || m.offer_app) {
+    // Offered when the reason for asking is a site or app not yet approved.
+    const always = el("button", "yes", m.offer_site ? `Yes, and always on ${m.offer_site}` : `Yes, and always in ${m.offer_app_label}`);
+    always.title = "JARVIS will not ask again here, whatever it needs to do, including sending messages.";
     always.onclick = () => answer(true, true);
     row.insertBefore(always, no);
   }
@@ -1136,7 +1137,7 @@ const panel = {
     code.onclick = () => { code.textContent = b.code; };
     text.appendChild(code);
 
-    text.appendChild(el("small", "", "Approved sites: JARVIS clicks and types on these without asking. Sending, buying and deleting always ask, as do banking and payment sites."));
+    text.appendChild(el("small", "", "Approved sites: JARVIS does whatever is needed on these without asking, including sending and submitting. Banking and payment sites still ask every time."));
     const sites = el("div");
     for (const site of b.approved_sites) {
       const line = el("div", "panel-actions");
@@ -1164,6 +1165,20 @@ const panel = {
       } catch (err) { note.textContent = err.message; }
     };
     text.appendChild(form);
+
+    text.appendChild(el("small", "", "Approved apps: JARVIS clicks and types in these desktop apps without asking, even after reading web content. Approve one from a permission prompt."));
+    for (const app of b.approved_apps) {
+      const line = el("div", "panel-actions");
+      line.style.margin = "4px 0";
+      const remove = el("button", "small-btn danger", "Remove");
+      remove.onclick = async () => {
+        await api("/api/browser/apps", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ app: app.name, approved: false }) });
+        this.show("accounts");
+      };
+      line.append(el("span", "", app.label), remove);
+      text.appendChild(line);
+    }
+    if (!b.approved_apps.length) text.appendChild(el("small", "", "None yet."));
     return row;
   },
 

@@ -6,10 +6,11 @@ That makes these the most powerful tools JARVIS has, so they have their own
 permission rules (in trusted mode):
 
   * Reading a page, listing tabs, opening a page, scrolling: no question.
-  * Clicking and typing on an APPROVED site: no question.
-  * Clicking and typing anywhere else: asks, and offers to approve the site.
-  * Anything that looks like sending, posting, buying or deleting: always asks.
-  * Banking and payment sites ([browser] always_ask): always ask.
+  * On an APPROVED site: no question, whatever the action, including
+    sending and submitting. Approving a site means trusting JARVIS on it.
+  * Anywhere else: asks, and offers to approve the site there and then.
+  * Banking and payment sites ([browser] always_ask): always ask, even
+    when approved.
   * Password fields and card numbers: never, in any mode.
 
 In careful mode every click and keystroke asks. Whatever a page says is
@@ -26,12 +27,6 @@ from jarvis.integrations.browser import BrowserError, always_asks, is_approved, 
 from jarvis.tools.desktop import looks_like_card_number
 
 PAGE_CHARS = 12_000
-# Labels that suggest a click does something that cannot be taken back.
-SENDS = re.compile(
-    r"\b(send|post|publish|submit|pay|buy|order|purchase|check ?out|confirm|delete|remove|transfer|donate|"
-    r"subscribe|unsubscribe|book|reserve|apply|tweet|reply|share|accept|agree|sign up|register|place|cancel)\b",
-    re.IGNORECASE,
-)
 _TAB = {"type": "integer", "description": "Tab id from browser_tabs. Omit for the tab you are working in."}
 
 
@@ -67,31 +62,24 @@ def _name(element: dict | None, ref) -> str:
     return f'{element["kind"]} "{element.get("label", "")}"' if element else f"element {ref}"
 
 
-def _rule(send_like):
-    """Builds the permission hook for an action. send_like(args, element)
-    says whether this particular call looks like sending or buying."""
-
-    def check(args: dict, ctx: ToolContext):
-        if ctx.browser is None:
-            return None
-        page = ctx.browser.page(args.get("tab"))
-        if not page or not page.get("url"):
-            return CONFIRM, "JARVIS has not read this tab yet, so cannot tell which site it is", "strict"
-        element = _element(args, ctx)
-        if element and element.get("secret") == "password":
-            return BLOCKED, "it is a password field, which JARVIS never fills in"
-        if element and element.get("secret") == "card" or looks_like_card_number(str(args.get("text", ""))):
-            return BLOCKED, "it involves payment card details, which JARVIS never enters"
-        url = page["url"]
-        if always_asks(ctx.settings, url):
-            return CONFIRM, f"{site_of(url)} looks like a banking or payment site, which always asks", "strict"
-        if send_like(args, element):
-            return CONFIRM, "it looks like it sends, posts, buys or deletes something", "strict"
-        if not is_approved(ctx.settings, url):
-            return CONFIRM, f"{site_of(url)} is not an approved site", "strict", {"offer_site": site_of(url)}
+def _rule(args: dict, ctx: ToolContext):
+    """The permission rule for every click and keystroke in the browser."""
+    if ctx.browser is None:
         return None
-
-    return check
+    page = ctx.browser.page(args.get("tab"))
+    if not page or not page.get("url"):
+        return CONFIRM, "JARVIS has not read this tab yet, so cannot tell which site it is", "strict"
+    element = _element(args, ctx)
+    if element and element.get("secret") == "password":
+        return BLOCKED, "it is a password field, which JARVIS never fills in"
+    if element and element.get("secret") == "card" or looks_like_card_number(str(args.get("text", ""))):
+        return BLOCKED, "it involves payment card details, which JARVIS never enters"
+    url = page["url"]
+    if always_asks(ctx.settings, url):
+        return CONFIRM, f"{site_of(url)} looks like a banking or payment site, which always asks", "strict"
+    if not is_approved(ctx.settings, url):
+        return CONFIRM, f"{site_of(url)} is not an approved site", "strict", {"offer_site": site_of(url)}
+    return None  # an approved site: go ahead with whatever is needed
 
 
 def _outline(result: dict, start: int = 0) -> str:
@@ -211,7 +199,10 @@ def _act(ctx: ToolContext, action: str, args: dict) -> ToolResult:
     done = bridge.call(action, {**args, "tab": tab})
     bridge.remember(done["tab"], [] if done.get("navigated") else None)
     extra = f" The tab is now at {done['tab']['url']}." if done.get("navigated") else ""
-    return ToolResult(f"Done: {done.get('done', action)}.{extra} Read the page again to see the result.")
+    note = ""
+    if action == "type" and args.get("submit"):
+        note = " In a chat or message box, Enter SENDS: the message has gone and the box is now empty, which is normal; do not type it again."
+    return ToolResult(f"Done: {done.get('done', action)}.{extra}{note} Read the page again to see the result.")
 
 
 @tool(
@@ -224,7 +215,7 @@ def _act(ctx: ToolContext, action: str, args: dict) -> ToolResult:
         "additionalProperties": False,
     },
     tier=CONFIRM, kind="control", own_trust_rules=True,
-    escalate=_rule(lambda a, e: bool(e and e.get("kind") != "link" and SENDS.search(e.get("label", "")))),
+    escalate=_rule,
     describe=lambda a, c: f"Click the {_name(_element(a, c), a.get('ref'))} {_where(a, c)}",
 )
 @_guard
@@ -252,8 +243,7 @@ def browser_click(args: dict, ctx: ToolContext) -> ToolResult:
         "additionalProperties": False,
     },
     tier=CONFIRM, kind="control", own_trust_rules=True,
-    # Pressing Enter in a search box searches; anywhere else it usually sends.
-    escalate=_rule(lambda a, e: bool(a.get("submit")) and not (e and e.get("search"))),
+    escalate=_rule,
     describe=lambda a, c: (
         f"Type into the {_name(_element(a, c), a.get('ref'))} {_where(a, c)}"
         + (" and press Enter" if a.get("submit") else "") + f":\n\n{a.get('text', '')}"
@@ -274,7 +264,7 @@ def browser_type(args: dict, ctx: ToolContext) -> ToolResult:
         "additionalProperties": False,
     },
     tier=CONFIRM, kind="control", own_trust_rules=True,
-    escalate=_rule(lambda a, e: False),
+    escalate=_rule,
     describe=lambda a, c: f'Choose "{a.get("option")}" in the {_name(_element(a, c), a.get("ref"))} {_where(a, c)}',
 )
 @_guard
@@ -292,7 +282,7 @@ def browser_select(args: dict, ctx: ToolContext) -> ToolResult:
         "additionalProperties": False,
     },
     tier=CONFIRM, kind="control", own_trust_rules=True,
-    escalate=_rule(lambda a, e: a.get("key") == "Enter"),  # Enter may send or submit
+    escalate=_rule,
     describe=lambda a, c: f"Press {a.get('key')} {_where(a, c)}",
 )
 @_guard
@@ -305,7 +295,7 @@ def browser_key(args: dict, ctx: ToolContext) -> ToolResult:
     description="Close a tab in the user's browser.",
     input_schema={"type": "object", "properties": {"tab": _TAB}, "additionalProperties": False},
     tier=CONFIRM, kind="control", own_trust_rules=True,
-    escalate=_rule(lambda a, e: False),
+    escalate=_rule,
     describe=lambda a, c: f"Close the tab {_where(a, c)}",
 )
 @_guard

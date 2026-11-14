@@ -32,7 +32,7 @@ from fastapi.responses import HTMLResponse, Response
 
 from jarvis.core import commands
 from jarvis.core.agent import Jarvis
-from jarvis.core.permissions import Decision
+from jarvis.core.permissions import Decision, app_label
 from jarvis.integrations.browser import BrowserBridge
 from jarvis.scheduler.runner import Scheduler
 from jarvis.scheduler.store import describe_when
@@ -82,6 +82,8 @@ class WebUI:
                 "reason": decision.reason,
                 "description": decision.description,
                 "offer_site": decision.offer_site,
+                "offer_app": decision.offer_app,
+                "offer_app_label": app_label(decision.offer_app) if decision.offer_app else None,
             }
         )
         # Wait for the user, but give up at once on an emergency stop.
@@ -89,13 +91,17 @@ class WebUI:
             if self.jarvis.kill.tripped:
                 break
         self._pending.pop(request_id, None)
-        if answer[0] and len(answer) > 1 and decision.offer_site:
-            # "Yes, and always on this site."
-            from jarvis.core.config import set_site_approval
+        if answer[0] and len(answer) > 1 and (decision.offer_site or decision.offer_app):
+            # "Yes, and always on this site" / "... in this app".
+            from jarvis.core.config import set_app_approval, set_site_approval
 
             try:
-                set_site_approval(self.jarvis.settings, decision.offer_site, True)
-                self.jarvis.log.record("site", detail=f"{decision.offer_site} approved from a permission prompt")
+                if decision.offer_site:
+                    set_site_approval(self.jarvis.settings, decision.offer_site, True)
+                    self.jarvis.log.record("approval", detail=f"site {decision.offer_site} approved from a permission prompt")
+                else:
+                    set_app_approval(self.jarvis.settings, decision.offer_app, True)
+                    self.jarvis.log.record("approval", detail=f"app {decision.offer_app} approved from a permission prompt")
             except ValueError:
                 pass
         return answer[0]
@@ -178,6 +184,7 @@ def create_app(jarvis: Jarvis, token: str | None = None, make_agent=None) -> Fas
             "reachable": getattr(app.state, "port", PORTS[0]) in PORTS,
             "code": bridge.code,
             "approved_sites": sorted(jarvis.settings.approved_sites),
+            "approved_apps": [{"name": a, "label": app_label(a)} for a in sorted(jarvis.settings.approved_apps)],
             "extension_folder": str(REPO_ROOT / "extension"),
         }
 
@@ -191,8 +198,21 @@ def create_app(jarvis: Jarvis, token: str | None = None, make_agent=None) -> Fas
             set_site_approval(jarvis.settings, str(data.get("site", "")), data.get("approved") is not False)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from None
-        jarvis.log.record("site", detail=f"{data.get('site')} {'approved' if data.get('approved') is not False else 'removed'} in the control panel")
+        jarvis.log.record("approval", detail=f"site {data.get('site')} {'approved' if data.get('approved') is not False else 'removed'} in the control panel")
         return {"approved_sites": sorted(jarvis.settings.approved_sites)}
+
+    @app.post("/api/browser/apps")
+    async def approved_app(request: Request) -> dict:
+        authorise(request)
+        from jarvis.core.config import set_app_approval
+
+        data = await request.json()
+        try:
+            set_app_approval(jarvis.settings, str(data.get("app", "")), data.get("approved") is not False)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+        jarvis.log.record("approval", detail=f"app {data.get('app')} {'approved' if data.get('approved') is not False else 'removed'} in the control panel")
+        return {"approved_apps": sorted(jarvis.settings.approved_apps)}
 
     # ---- scheduling: results go to the open window (and the tray, if any)
 

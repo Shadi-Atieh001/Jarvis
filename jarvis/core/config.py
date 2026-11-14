@@ -35,6 +35,7 @@ class Settings:
     ollama_think: bool = False
 
     approved_sites: list = field(default_factory=list)  # websites where JARVIS may act without asking
+    approved_apps: list = field(default_factory=list)  # desktop apps where JARVIS may click and type without asking
     always_ask_sites: list = field(default_factory=list)  # patterns for sites that always ask (banking, payment)
     launcher: list = field(default_factory=list)  # quick-launch buttons: {"label", "open"}
     memory_enabled: bool = True
@@ -204,6 +205,34 @@ def _valid_site(site) -> bool:
     return isinstance(site, str) and bool(re.fullmatch(r"[a-z0-9.-]{3,200}", site)) and "." in site
 
 
+def _valid_app(app) -> bool:
+    return isinstance(app, str) and 0 < len(app.strip()) <= 200 and "\n" not in app
+
+
+def set_app_approval(s: Settings, app: str, approved: bool) -> None:
+    """Add or remove a desktop app from the approved list, now and for next time."""
+    import json
+
+    app = app.strip()
+    if not _valid_app(app):
+        raise ValueError(f"{app!r} is not an app name.")
+    path = overrides_path(s)
+    try:
+        saved = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(saved, dict):
+            saved = {}
+    except (OSError, ValueError):
+        saved = {}
+    same = lambda x: isinstance(x, str) and x.lower() == app.lower()  # noqa: E731
+    apps = [x for x in saved.get("approved_apps", []) if _valid_app(x) and not same(x)]
+    s.approved_apps = [x for x in s.approved_apps if not same(x)]
+    if approved:
+        apps.append(app)
+        s.approved_apps.append(app)
+    saved["approved_apps"] = apps
+    path.write_text(json.dumps(saved, indent=2), encoding="utf-8")
+
+
 def set_site_approval(s: Settings, site: str, approved: bool) -> None:
     """Add or remove a website from the approved list, now and for next time."""
     import json
@@ -247,6 +276,10 @@ def apply_overrides(s: Settings) -> None:
             for site in value:
                 if _valid_site(site) and site not in s.approved_sites:
                     s.approved_sites.append(site)
+        elif key == "approved_apps" and isinstance(value, list):
+            for app in value:
+                if _valid_app(app) and app not in s.approved_apps:
+                    s.approved_apps.append(app)
 
 
 def save_override(s: Settings, key: str, value) -> None:

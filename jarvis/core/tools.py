@@ -95,6 +95,9 @@ class Tool:
     # True for tools that decide for themselves what is safe after untrusted
     # content has been read (the browser tools, which use approved sites).
     own_trust_rules: bool = False
+    # Optional: (args, ctx) -> the name of the app this call would act on
+    # (for the mouse and keyboard tools), so that app can be approved once.
+    target_app: Callable[[dict, ToolContext], str | None] | None = None
 
     def api_definition(self) -> dict:
         return {
@@ -119,6 +122,7 @@ def tool(
     describe=None,
     blockable_text=None,
     own_trust_rules: bool = False,
+    target_app=None,
 ):
     """Register a function as a JARVIS tool."""
     if kind not in KINDS:
@@ -130,7 +134,7 @@ def tool(
         # The loader finds tools by looking for this attribute.
         func.jarvis_tool = Tool(
             name, description, input_schema, func, tier, read_only, kind, escalate, describe, blockable_text,
-            own_trust_rules,
+            own_trust_rules, target_app,
         )
         return func
 

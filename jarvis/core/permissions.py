@@ -33,6 +33,19 @@ from .tools import AUTO, BLOCKED, CONFIRM, TIER_ORDER, Tool, ToolContext
 
 
 MODES = ("careful", "trusted", "unrestricted")
+# Approving a whole browser would approve every website in it, so browsers
+# are never offered; websites are approved one by one through the extension.
+BROWSERS = ("chrome.exe", "msedge.exe", "firefox.exe", "brave.exe", "opera.exe", "vivaldi.exe", "iexplore.exe")
+
+
+def is_browser(app: str) -> bool:
+    return app.lower().split("|")[0] in BROWSERS
+
+
+def app_label(app: str) -> str:
+    """'WhatsApp.exe' -> 'WhatsApp'; 'ApplicationFrameHost.exe|Calculator' -> 'Calculator'."""
+    name = app.split("|")[-1]
+    return name[:-4] if name.lower().endswith(".exe") else name
 
 
 @dataclass
@@ -43,6 +56,8 @@ class Decision:
     # Set when the only reason for asking is that a website is not yet
     # approved: the window then offers "Yes, and always on this site".
     offer_site: str | None = None
+    # The same for a desktop app: "Yes, and always in this app".
+    offer_app: str | None = None
 
 
 class PermissionGate:
@@ -104,11 +119,25 @@ class PermissionGate:
                 offer_site = None
 
         # 3. Untrusted content read earlier in this request.
+        offer_app = None
         if self.tainted and self.settings.confirm_after_untrusted and tier == AUTO and not tool.own_trust_rules:
             if mode == "careful" and not tool.read_only:
                 tier, reason = CONFIRM, "untrusted content was read earlier in this request"
             elif mode == "trusted" and tool.kind not in ("read", "launch"):
-                tier, reason = CONFIRM, "a web page or outside file was read earlier in this request"
+                # Mouse and keyboard actions name the app they would act on.
+                # In an app you have approved, they go ahead.
+                app = None
+                if tool.target_app is not None:
+                    try:
+                        app = tool.target_app(args, ctx)
+                    except Exception:
+                        app = None
+                if not (app and app.lower() in {a.lower() for a in self.settings.approved_apps}):
+                    tier = CONFIRM
+                    if app and not is_browser(app):
+                        reason, offer_app = f"{app_label(app)} is not an approved app, and web or outside content was read earlier in this request", app
+                    else:
+                        reason = "a web page or outside file was read earlier in this request"
 
         # 4. Blocked patterns, in every mode.
         if tool.blockable_text is not None:
@@ -119,7 +148,8 @@ class PermissionGate:
                     reason = f"matches blocked pattern {pattern.pattern!r}"
                     break
 
-        return Decision(tier, reason, description, offer_site if tier == CONFIRM else None)
+        confirm = tier == CONFIRM
+        return Decision(tier, reason, description, offer_site if confirm else None, offer_app if confirm else None)
 
     @staticmethod
     def _describe(tool: Tool, args: dict, ctx: ToolContext) -> str:

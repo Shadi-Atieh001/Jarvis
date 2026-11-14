@@ -114,20 +114,19 @@ def test_unapproved_site_asks_and_offers_to_approve(settings, registry, ctx, bro
     assert d.tier == CONFIRM and "hello there" in d.description
 
 
-def test_approved_site_acts_freely_but_sending_still_asks(settings, registry, ctx, browser):
+def test_one_approval_covers_everything_on_the_site(settings, registry, ctx, browser):
     run(registry, ctx, "browser_read")
-    set_site_approval(settings, "example.com", True)  # covers shop.example.com too
     tier = lambda name, **a: decide(settings, registry, ctx, name, **a)  # noqa: E731
-    assert tier("browser_click", ref=1).tier == AUTO
-    assert tier("browser_click", ref=7).tier == AUTO                      # "Add to basket"
-    assert tier("browser_click", ref=8).tier == AUTO                      # a link, even with a scary word in it
-    assert tier("browser_type", ref=3, text="hi").tier == AUTO
-    assert tier("browser_type", ref=2, text="tea", submit=True).tier == AUTO  # Enter in a search box searches
-    assert tier("browser_select", ref=7, option="Large").tier == AUTO
-    for name, args in [("browser_click", {"ref": 4}), ("browser_type", {"ref": 3, "text": "hi", "submit": True}), ("browser_key", {"key": "Enter"})]:
+    everything = [("browser_click", {"ref": 1}), ("browser_click", {"ref": 4}),               # a link; the Send button
+                  ("browser_type", {"ref": 3, "text": "hi", "submit": True}),                  # type a message and press Enter
+                  ("browser_type", {"ref": 2, "text": "tea", "submit": True}), ("browser_select", {"ref": 7, "option": "Large"}),
+                  ("browser_key", {"key": "Enter"}), ("browser_close", {})]
+    for name, args in everything:  # before approval: each asks, and offers to approve the site
         d = tier(name, **args)
-        assert d.tier == CONFIRM and "sends, posts, buys or deletes" in d.reason and d.offer_site is None, name
-    assert tier("browser_key", key="Escape").tier == AUTO
+        assert d.tier == CONFIRM and d.offer_site == "shop.example.com", name
+    set_site_approval(settings, "example.com", True)  # covers shop.example.com too
+    for name, args in everything:  # after approval: nothing asks
+        assert tier(name, **args).tier == AUTO, name
 
 
 def test_banking_and_payment_sites_always_ask_even_when_approved(settings, registry, ctx, browser):
@@ -213,6 +212,7 @@ def test_page_content_makes_other_tools_ask_but_not_the_approved_site(make_jarvi
     ui = FakeUI(approve=False)
     j.send("have a look at the shop", ui)
     assert ui.tools == [("browser_read", "auto"), ("browser_click", "auto"), ("run_command", "denied")]
+    assert ui.confirms[0][1].offer_site is None and ui.confirms[0][1].offer_app is None  # commands are never "approved for good"
     assert [c[0] for c in ui.confirms] == ["run_command"]  # the click was free; the command was not
     assert "<untrusted_data" in tool_results(client, 1)[0]["content"]
 
@@ -301,7 +301,7 @@ def test_approving_a_site_from_the_permission_prompt(make_jarvis):
             if m["type"] == "done":
                 break
         assert "confirm" not in kinds  # no question the second time
-    assert any(e["event"] == "site" for e in j.log.tail(20))
+    assert any(e["event"] == "approval" for e in j.log.tail(20))
 
 
 def test_browser_panel_endpoints(make_jarvis):
@@ -334,3 +334,103 @@ def test_extension_files_are_shipped():
 
     listed = [int(n) for n in re.search(r"const PORTS = \[([\d, ]+)\]", worker).group(1).split(",")]
     assert tuple(listed) == server.PORTS
+
+
+# ------------------------------------------------------- approved desktop apps
+
+
+def test_desktop_app_is_approved_once_then_free(make_jarvis, monkeypatch):
+    """After web content has been read, clicking and typing in a desktop app
+    asks once, with an offer to approve the app; after that it does not ask."""
+    from jarvis.core.config import set_app_approval
+    from jarvis.tools import desktop, web
+
+    from .test_web_desktop import FakeDesktop
+
+    backend = FakeDesktop()
+    backend.last_app = "WhatsApp.exe"
+    backend.front_app = lambda: "WhatsApp.exe"
+    monkeypatch.setattr(desktop, "_backend", lambda: backend)
+    monkeypatch.setattr(desktop, "_last_snapshot", [])
+    monkeypatch.setattr(desktop, "_last_app", None)
+    monkeypatch.setattr(desktop.time, "sleep", lambda s: None)
+    monkeypatch.setattr(web, "_search", lambda q, n: [{"title": "x", "href": "https://x.example", "body": "y"}])
+
+    def script():
+        return [reply(call("web_search", {"query": "dad's number"})), reply(call("read_screen", {})),
+                reply(call("click", {"element": 2}), call("type_text", {"text": "Jarvis is working", "press_enter": True})),
+                reply(text("Sent."))]
+
+    j, client = make_jarvis(*script(), *script())
+    j.settings.permission_mode = "trusted"
+    ui = FakeUI(approve=True)
+    j.send("message dad", ui)
+    assert [c[0] for c in ui.confirms] == ["click", "type_text"]  # not approved yet: both ask...
+    first = ui.confirms[0][1]
+    assert first.offer_app == "WhatsApp.exe" and "WhatsApp is not an approved app" in first.reason  # ...and offer approval
+    sent = tool_results(client, 3)[1]["content"]
+    assert "Enter SENDS" in sent and "Do not type it again" in sent  # an empty box afterwards is success
+
+    set_app_approval(j.settings, "WhatsApp.exe", True)
+    ui2 = FakeUI(approve=False)
+    j.send("message dad again", ui2)
+    assert ui2.confirms == [] and ("type", "Jarvis is working") in backend.actions[-3:]  # approved: no questions
+
+    backend.front_app = lambda: "notepad.exe"  # a different app is still asked about
+    assert PermissionGate(j.settings).decide(j.registry.get("type_text"), {"text": "x"}, j.ctx).tier == AUTO  # (not tainted now)
+
+
+def test_a_browser_is_never_approved_as_an_app(settings, registry, ctx):
+    from jarvis.core.config import set_app_approval
+    from jarvis.core.permissions import app_label, is_browser
+    from jarvis.tools import desktop
+
+    assert is_browser("chrome.exe") and is_browser("MSEDGE.EXE") and not is_browser("WhatsApp.exe")
+    assert app_label("WhatsApp.exe") == "WhatsApp" and app_label("ApplicationFrameHost.exe|Calculator") == "Calculator"
+    settings.permission_mode = "trusted"
+    gate = PermissionGate(settings)
+    gate.note_untrusted()
+    tool = registry.get("type_text")
+    original, tool.target_app = tool.target_app, lambda a, c: "chrome.exe"
+    try:
+        d = gate.decide(tool, {"text": "hello"}, ctx)
+        assert d.tier == CONFIRM and d.offer_app is None  # websites are approved one by one, in the extension
+        tool.target_app = lambda a, c: "Spotify.exe"
+        assert gate.decide(tool, {"text": "hello"}, ctx).offer_app == "Spotify.exe"
+        set_app_approval(settings, "spotify.exe", True)  # letter case does not matter
+        assert gate.decide(tool, {"text": "hello"}, ctx).tier == AUTO
+        assert gate.decide(tool, {"text": "4111 1111 1111 1111"}, ctx).tier == BLOCKED  # still never a card number
+        set_app_approval(settings, "Spotify.exe", False)
+        assert gate.decide(tool, {"text": "hello"}, ctx).tier == CONFIRM
+    finally:
+        tool.target_app = original
+    assert desktop._app_for_click({"x": 1, "y": 2}, ctx) is None  # no Windows here: unknown app, so it simply asks
+
+
+def test_approving_an_app_from_the_prompt_and_the_panel(make_jarvis, monkeypatch):
+    from jarvis.tools import desktop, web
+
+    from .test_web_desktop import FakeDesktop
+
+    backend = FakeDesktop()
+    backend.last_app, backend.front_app = "WhatsApp.exe", lambda: "WhatsApp.exe"
+    monkeypatch.setattr(desktop, "_backend", lambda: backend)
+    monkeypatch.setattr(desktop.time, "sleep", lambda s: None)
+    monkeypatch.setattr(web, "_search", lambda q, n: [{"title": "x", "href": "https://x.example", "body": "y"}])
+    j, _ = make_jarvis(reply(call("web_search", {"query": "q"})), reply(call("type_text", {"text": "hello"})), reply(text("Done.")))
+    j.settings.permission_mode = "trusted"
+    c = TestClient(server.create_app(j, token="tok"))
+    with c.websocket_connect("/ws?token=tok", headers={"origin": "http://testserver"}) as ws:
+        ws.send_json({"type": "user", "text": "say hello"})
+        while True:
+            m = ws.receive_json()
+            if m["type"] == "confirm":
+                assert m["offer_app"] == "WhatsApp.exe" and m["offer_app_label"] == "WhatsApp" and m["offer_site"] is None
+                ws.send_json({"type": "confirm_reply", "id": m["id"], "approved": True, "approve_site": True})
+            if m["type"] == "done":
+                break
+    assert j.settings.approved_apps == ["WhatsApp.exe"]
+    state = c.get("/api/browser", headers=HEADERS).json()
+    assert state["approved_apps"] == [{"name": "WhatsApp.exe", "label": "WhatsApp"}]
+    assert c.post("/api/browser/apps", headers=HEADERS, json={"app": "WhatsApp.exe", "approved": False}).json() == {"approved_apps": []}
+    assert c.post("/api/browser/apps", json={"app": "x"}).status_code == 403

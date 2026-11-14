@@ -432,24 +432,25 @@ installed; that is expected for an extension not from the store.
 | Action | Rule |
 |---|---|
 | List tabs, open a page, read a page, scroll | Never asks |
-| Click or type on an **approved site** | Does not ask |
-| Click or type on any other site | Asks, and offers "Yes, and always on this site" |
-| Anything that looks like sending, posting, buying or deleting | Always asks, even on an approved site |
+| Anything on an **approved site** | Does not ask, including sending messages and submitting forms |
+| Anything on any other site | Asks once, and offers "Yes, and always on this site" |
 | Any action on a banking or payment site | Always asks, even if approved |
 | Typing into a password field, or typing card details | Never, in any mode |
 
-Approved sites are listed, and can be added or removed, under CONTROL >
-Accounts > Browser. Approving `example.com` also covers `shop.example.com`.
-In Careful mode every click and keystroke asks; in Unrestricted mode
-nothing asks, though passwords and card details remain blocked.
+Approving a site is a single decision that is remembered: after it, JARVIS
+does whatever a task needs on that site without asking again. Approved
+sites are listed, and can be removed or added, under CONTROL > Accounts >
+Browser. Approving `example.com` also covers `shop.example.com`. In
+Careful mode every click and keystroke asks; in Unrestricted mode nothing
+asks, though passwords and card details remain blocked.
 
 Things to understand about these rules:
 
-- **"Looks like sending" is a judgment from the button's wording** (Send,
-  Post, Pay, Buy, Order, Delete, Confirm, Submit and similar) and from
-  pressing Enter anywhere but a search box. It will sometimes ask when it
-  need not, and a button with unusual wording could slip past it. On a site
-  you have approved, JARVIS is acting as you; approve sites accordingly.
+- **Approving a site means trusting JARVIS on it completely.** On an
+  approved site it acts as you, with your sign-in, and will send, post,
+  submit or delete without showing you first. A page on that site with
+  hidden instructions could, in principle, steer it. Approve the sites you
+  want it working on, and remove any you no longer do.
 - **Banking and payment sites are recognised by their address**, using the
   patterns under `[browser] always_ask` in `settings.toml`. Add your own
   bank's address there if its name is not caught.
@@ -457,6 +458,13 @@ Things to understand about these rules:
   tools (files, commands, email) ask before acting for the rest of that
   request, as with any web content.
 - **Passwords and one-time codes are yours to type.** JARVIS will ask you to.
+
+**Desktop apps work the same way.** When JARVIS clicks and types in a
+desktop app (WhatsApp's own app, say) after it has read something from the
+web, it asks once, with "Yes, and always in WhatsApp". Approve the app and
+it no longer asks there. Approved apps are listed under CONTROL > Accounts
+> Browser too. Web browsers themselves cannot be approved this way, since
+that would approve every website at once; approve websites individually.
 
 Limits: it reads the main page only, not content inside embedded frames;
 some unusual sites build their controls in ways it cannot see, and for
@@ -789,7 +797,7 @@ without asking:
 | Mode | Runs without asking | Asks first |
 |---|---|---|
 | `careful` | Reading; new files in the workspace | Everything else |
-| `trusted` (default) | Commands, code, files anywhere, opening apps, clicking and typing | Deleting; sending email, invitations and public posts; and see "after reading the web" below |
+| `trusted` (default) | Commands, code, files anywhere, opening apps, clicking and typing | Deleting files; sending email, invitations and public posts through JARVIS's own connections; and see "after reading the web" below |
 | `unrestricted` | Everything | Nothing |
 
 In every mode:
@@ -808,7 +816,9 @@ In every mode:
 file from outside the workspace can contain hidden text written to
 manipulate an assistant, such as "run this command". Once JARVIS has read
 one, it asks before changing files, running commands, clicking or typing
-for the rest of that request. Looking things up, reading the screen and
+for the rest of that request. The exceptions are websites and desktop apps
+you have approved, where it carries on without asking (see
+[JARVIS in your browser](#jarvis-in-your-browser)). Looking things up, reading the screen and
 opening pages or apps stay automatic. Your next message starts fresh. If
 you would rather never be asked, set `confirm_after_untrusted = false`,
 understanding that a malicious page could then make JARVIS act unseen.
