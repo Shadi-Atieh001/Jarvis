@@ -163,7 +163,7 @@ workspace = "~/.jarvis/workspace"
 #                   or finance site or app (see [browser] always_ask)
 # In every mode: blocked commands stay blocked, sensitive files are
 # protected, and the Stop button works.
-mode = "trusted"
+mode = "unrestricted"
 # Tier for tools that do not say what kind of action they are.
 default = "confirm"
 # Web pages and files can contain hidden instructions aimed at JARVIS. With

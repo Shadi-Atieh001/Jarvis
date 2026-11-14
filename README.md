@@ -798,8 +798,8 @@ without asking:
 | Mode | Runs without asking | Asks first |
 |---|---|---|
 | `careful` | Reading; new files in the workspace | Everything else |
-| `trusted` (default) | Commands, code, files anywhere, opening apps, clicking and typing | Deleting files; sending email, invitations and public posts through JARVIS's own connections; and see "after reading the web" below |
-| `unrestricted` | Everything | Only actions on a banking, payment or finance site or app |
+| `trusted` | Commands, code, files anywhere, opening apps, clicking and typing | Deleting files; sending email, invitations and public posts through JARVIS's own connections; and see "after reading the web" below |
+| `unrestricted` (default) | Everything | Only actions on a banking, payment or finance site or app |
 
 In every mode:
 

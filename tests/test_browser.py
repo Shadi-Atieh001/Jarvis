@@ -481,3 +481,39 @@ def test_unrestricted_asks_nothing_except_for_banking_and_finance(settings, regi
     # And these are refused outright, as in every mode.
     assert tier("type_text", text="4111 1111 1111 1111").tier == BLOCKED
     assert tier("run_command", command="netsh advfirewall set allprofiles state off").tier == BLOCKED
+
+
+# ------------------------------------------------------- fewer round trips
+
+
+def test_actions_hand_back_the_page_so_no_second_read_is_needed(settings, registry, ctx, browser):
+    settings.approved_sites = ["shop.example.com"]
+    after = {"title": "Chat with Dad", "url": SHOP, "text": '## Dad\n[1] field "Type a message to Dad"\n[2] button "Send"',
+             "elements": [{"ref": 1, "kind": "field", "label": "Type a message to Dad", "value": ""}, {"ref": 2, "kind": "button", "label": "Send"}]}
+    real = browser.call
+
+    def call(action, args=None, timeout=40):
+        result = real(action, args, timeout)
+        if action == "open":
+            return {**result, "page": {**after, "text": '[1] clickable "Dad 7:19 PM"', "elements": [{"ref": 1, "kind": "clickable", "label": "Dad 7:19 PM"}] * 3}}
+        return {**result, "page": after} if action in ("click", "type") else result
+
+    browser.call = call
+    opened = run(registry, ctx, "browser_open", url=SHOP)
+    assert '[1] clickable "Dad 7:19 PM"' in opened.text and opened.taints
+    assert [a for a, _ in browser.calls] == ["open"]  # no separate read
+
+    clicked = run(registry, ctx, "browser_click", ref=1)
+    assert clicked.text.startswith("Done: clicked.") and 'field "Type a message to Dad"' in clicked.text
+    assert clicked.taints and clicked.untrusted_source  # still treated as untrusted web content
+    # The new numbers are usable at once, without browser_read.
+    assert browser.page(None)["elements"][1]["label"] == "Type a message to Dad"
+    typed = run(registry, ctx, "browser_type", ref=1, text="jarvis is now fast", submit=True)
+    assert not typed.is_error and "Enter SENDS" in typed.text
+    assert [a for a, _ in browser.calls] == ["open", "click", "type"]
+
+
+def test_a_page_that_has_not_drawn_itself_yet_says_so(settings, registry, ctx, browser):
+    real = browser.call
+    browser.call = lambda action, args=None, timeout=40: {**real(action, args, timeout), "text": "Loading", "elements": []} if action == "read" else real(action, args, timeout)
+    assert "still loading" in run(registry, ctx, "browser_read").text

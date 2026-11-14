@@ -4,10 +4,21 @@
 
 // Read the page as text: its visible words in reading order, with every
 // link, button and field numbered like [12] so JARVIS can refer to it.
-function jarvisReadPage() {
+// With wait set, it first gives a page that is still drawing itself (chat
+// apps, mail, anything built by scripts) a few seconds to settle.
+async function jarvisReadPage(wait) {
+  const snapshot = () => {
   const INTERACTIVE = "a[href], button, input, select, textarea, summary, [role=button], [role=link], [role=tab], " +
     "[role=menuitem], [role=checkbox], [role=radio], [role=option], [role=switch], [role=textbox], [role=searchbox], " +
-    "[role=combobox], [contenteditable=''], [contenteditable=true], [onclick], [tabindex]:not([tabindex='-1'])";
+    "[role=combobox], [contenteditable=''], [contenteditable=true], [onclick], [tabindex]:not([tabindex='-1']), " +
+    "[role=row][tabindex], [role=listitem][tabindex], [role=gridcell][tabindex], [role=treeitem]";
+  // Many sites make plain boxes clickable (a chat in a list, a card). The
+  // hand cursor gives them away; only the outermost such box is numbered.
+  const clickable = (el) => {
+    if (el === document.body || !el.parentElement) return false;
+    if (getComputedStyle(el).cursor !== "pointer" || getComputedStyle(el.parentElement).cursor === "pointer") return false;
+    return !!clean(el.getAttribute("aria-label") || el.innerText);
+  };
   const BLOCK = new Set(["P", "DIV", "LI", "TR", "SECTION", "ARTICLE", "HEADER", "FOOTER", "MAIN", "NAV", "ASIDE", "UL", "OL",
     "TABLE", "H1", "H2", "H3", "H4", "H5", "H6", "BR", "FORM", "FIELDSET", "DETAILS", "BLOCKQUOTE", "PRE", "DD", "DT"]);
   const MAX_ELEMENTS = 500, MAX_TEXT = 60000;
@@ -26,7 +37,7 @@ function jarvisReadPage() {
   const describe = (el) => {
     const tag = el.tagName.toLowerCase();
     const type = (el.getAttribute("type") || "").toLowerCase();
-    let kind = el.getAttribute("role") || tag;
+    let kind = el.getAttribute("role") || (tag === "div" || tag === "span" || tag === "li" ? "clickable" : tag);
     if (tag === "a") kind = "link";
     if (tag === "input") kind = ["checkbox", "radio", "submit", "button", "file", "range"].includes(type) ? type : "field";
     if (tag === "textarea" || el.isContentEditable) kind = "field";
@@ -75,7 +86,7 @@ function jarvisReadPage() {
     const block = BLOCK.has(tag);
     if (block && !out.endsWith("\n")) out += "\n";
     if (/^H[1-6]$/.test(tag)) out += "#".repeat(Number(tag[1])) + " ";
-    if (node.matches(INTERACTIVE) && elements.length < MAX_ELEMENTS) {
+    if ((node.matches(INTERACTIVE) || clickable(node)) && elements.length < MAX_ELEMENTS) {
       const item = describe(node);
       node.setAttribute("data-jarvis-ref", String(item.ref));
       elements.push(item);
@@ -103,11 +114,26 @@ function jarvisReadPage() {
     elements,
     scroll: { y: Math.round(scrollY), height: Math.round(document.documentElement.scrollHeight), view: Math.round(innerHeight) },
   };
+  };
+
+  let page = snapshot();
+  if (!wait) return page;
+  // Settled = two looks, a moment apart, that see the same thing, with
+  // something on the page to work with. Give up waiting after six seconds.
+  const started = Date.now();
+  while (Date.now() - started < 6000) {
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    const next = snapshot();
+    const same = next.elements.length === page.elements.length && next.text.length === page.text.length;
+    page = next;
+    if (same && (page.elements.length > 2 || Date.now() - started > 2500)) break;
+  }
+  return page;
 }
 
 // Do one thing on the page: click, type, choose from a dropdown, scroll,
 // or press a key. Elements are found by the numbers jarvisReadPage gave them.
-function jarvisAct(action, args) {
+async function jarvisAct(action, args) {
   const flash = (el) => {  // show the user what JARVIS is touching
     const old = el.style.outline;
     el.style.outline = "3px solid #19e3f5";
@@ -189,6 +215,21 @@ function jarvisAct(action, args) {
     if (args.submit) {
       key(el, "Enter");
       if (el.form && typeof el.form.requestSubmit === "function") el.form.requestSubmit();
+      if (el.isContentEditable) {
+        // Some chat boxes ignore an Enter that did not come from a real
+        // keyboard. If the words are still sitting there, press Send.
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        if ((el.innerText || "").trim()) {
+          let box = el.parentElement, send = null;
+          for (let i = 0; i < 8 && box && !send; i++, box = box.parentElement) {
+            send = Array.from(box.querySelectorAll("button, [role=button]")).find((b) =>
+              /^send\b/i.test((b.getAttribute("aria-label") || b.getAttribute("title") || b.innerText || "").trim()) ||
+              b.querySelector("[data-icon*=send]"));
+          }
+          if (send) { send.click(); return { done: "typed and pressed Send" }; }
+          return { done: "typed and pressed Enter, but the text is still in the box: find and click the Send button" };
+        }
+      }
     }
     return { done: args.submit ? "typed and pressed Enter" : "typed" };
   }

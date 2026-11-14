@@ -144,7 +144,10 @@ async function run(action, args) {
       tab = await chrome.tabs.create({ url: args.url, active: args.background !== true });
     }
     await waitUntilLoaded(tab.id);
-    return tabInfo(await chrome.tabs.get(tab.id));
+    // Hand back the page already read, so JARVIS need not ask again.
+    let page = null;
+    try { page = await inPage(await chrome.tabs.get(tab.id), jarvisReadPage, [true]); } catch (_) {}
+    return { ...tabInfo(await chrome.tabs.get(tab.id)), page };
   }
   if (action === "focus") {
     const tab = await chooseTab(args.tab);
@@ -160,7 +163,7 @@ async function run(action, args) {
 
   const tab = await chooseTab(args.tab);
   if (action === "read") {
-    const page = await inPage(tab, jarvisReadPage);
+    const page = await inPage(tab, jarvisReadPage, [true]);
     return { tab: tabInfo(await chrome.tabs.get(tab.id)), ...page };
   }
   if (action === "click" || action === "type" || action === "select" || action === "scroll" || action === "key") {
@@ -170,7 +173,10 @@ async function run(action, args) {
     await new Promise((resolve) => setTimeout(resolve, 400));
     let now = await chrome.tabs.get(tab.id);
     if (now.status === "loading" || now.url !== before) { await waitUntilLoaded(tab.id, 10000); now = await chrome.tabs.get(tab.id); }
-    return { ...done, tab: tabInfo(now), navigated: now.url !== before };
+    // Read the page as it is now, so JARVIS sees the result in the same step.
+    let page = null;
+    if (action !== "scroll") { try { page = await inPage(now, jarvisReadPage, [true]); } catch (_) {} }
+    return { ...done, tab: tabInfo(now), navigated: now.url !== before, page };
   }
   throw new Error(`Unknown command: ${action}`);
 }

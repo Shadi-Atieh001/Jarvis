@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.17.0 — Faster in the browser; unrestricted by default (2026-11-14)
+
+Changed
+- The shipped permission mode is now `unrestricted`: nothing asks except
+  banking, payment and finance sites and apps. A mode you chose yourself
+  under CONTROL > Settings still wins.
+- Working a website takes far fewer steps. Opening a page, clicking and
+  typing each hand JARVIS the page as it is afterwards, so it no longer
+  reads the page separately between every action. Sending a chat message
+  is now three steps: open, click the conversation, type and send.
+- The extension waits a few seconds for script-built pages (WhatsApp Web,
+  mail, chat apps) to finish drawing before reading them, instead of
+  returning an empty page.
+- Clickable boxes that are not real links or buttons, such as a chat in a
+  conversation list, are now numbered and can be clicked.
+- When a chat box ignores Enter, the extension presses the Send button
+  next to it.
+- JARVIS is told not to list tabs, re-read, or look at the screen to
+  double-check a website it is already working in.
+
+Not yet verified
+- Tested against a stand-in chat page, not against WhatsApp Web itself.
+  The browser extension must be reloaded (it is now version 1.1.0).
+
 ## 0.16.0 — Unrestricted means no questions, except banking (2026-11-14)
 
 Changed

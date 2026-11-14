@@ -191,8 +191,8 @@ def test_unknown_mode_and_untyped_tools_fall_back_to_careful(settings, registry,
     assert PermissionGate(settings).decide(untyped, {}, ctx).tier == CONFIRM
 
 
-def test_shipped_settings_use_trusted_mode():
+def test_shipped_settings_use_unrestricted_mode():
     from jarvis.core.config import REPO_ROOT, load_settings
 
     s = load_settings(REPO_ROOT / "settings.toml")
-    assert s.permission_mode == "trusted" and s.tool_tiers == {} and s.confirm_after_untrusted is True
+    assert s.permission_mode == "unrestricted" and s.tool_tiers == {} and s.confirm_after_untrusted is True

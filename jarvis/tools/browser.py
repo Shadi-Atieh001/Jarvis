@@ -95,11 +95,16 @@ def _outline(result: dict, start: int = 0) -> str:
     return "\n".join(lines)
 
 
-def _read(ctx: ToolContext, tab: int | None, start: int = 0) -> ToolResult:
+def _read(ctx: ToolContext, tab: int | None, start: int = 0, result: dict | None = None, prefix: str = "") -> ToolResult:
+    """Show a page. `result` is a reading the extension already sent back
+    with an action, which saves asking for it again."""
     bridge = _bridge(ctx)
-    result = bridge.call("read", {"tab": tab if tab is not None else bridge.working_tab})
+    if result is None:
+        result = bridge.call("read", {"tab": tab if tab is not None else bridge.working_tab})
+    if len(result.get("elements", [])) < 3 and len(result.get("text", "")) < 200:
+        prefix += "[The page is still loading or shows very little. Call browser_read again in a moment.]\n\n"
     bridge.remember({**result["tab"], "url": result.get("url") or result["tab"].get("url", "")}, result.get("elements", []))
-    return ToolResult(_outline(result, start), untrusted_source=result.get("url", "web page"), taints=True)
+    return ToolResult(prefix + _outline(result, start), untrusted_source=result.get("url", "web page"), taints=True)
 
 
 # ---------------------------------------------------------------- looking
@@ -145,15 +150,17 @@ def browser_open(args: dict, ctx: ToolContext) -> ToolResult:
     bridge = _bridge(ctx)
     tab = bridge.call("open", {"url": url, "new_tab": args.get("new_tab", True), "tab": bridge.working_tab})
     bridge.remember(tab, [])
-    return _read(ctx, tab["id"])
+    page = tab.get("page")
+    return _read(ctx, tab["id"], result={"tab": tab, **page} if page else None)
 
 
 @tool(
     name="browser_read",
     description=(
         "Read a tab in the user's browser: its text in reading order, with every link, button and field numbered "
-        "like [12]. Use those numbers with browser_click and browser_type. Read again after the page changes, "
-        "because the numbers change."
+        "like [12]. Use those numbers with browser_click and browser_type. browser_open, browser_click and "
+        "browser_type already return the page as it is afterwards, so only call this for a tab you have not seen "
+        "or to read further down a long page."
     ),
     input_schema={
         "type": "object",
@@ -202,7 +209,11 @@ def _act(ctx: ToolContext, action: str, args: dict) -> ToolResult:
     note = ""
     if action == "type" and args.get("submit"):
         note = " In a chat or message box, Enter SENDS: the message has gone and the box is now empty, which is normal; do not type it again."
-    return ToolResult(f"Done: {done.get('done', action)}.{extra}{note} Read the page again to see the result.")
+    summary = f"Done: {done.get('done', action)}.{extra}{note}"
+    if done.get("page"):
+        # The extension read the page straight after acting: show it now.
+        return _read(ctx, done["tab"]["id"], result={"tab": done["tab"], **done["page"]}, prefix=summary + " The page now:\n\n")
+    return ToolResult(f"{summary} Read the page again to see the result.")
 
 
 @tool(
