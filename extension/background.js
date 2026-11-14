@@ -11,38 +11,69 @@
 
 importScripts("page.js");
 
-const ADDRESS = "ws://127.0.0.1:47821/ws/browser";
+// JARVIS listens on the first of these ports that is free on your computer
+// (the same list is in jarvis/ui/server.py). Each is tried in turn.
+const PORTS = [47821, 47822, 47823, 47824];
 let socket = null;
 let state = "not paired";  // shown in the popup
+let trying = false;
+let again = false;   // a new pairing code arrived while a try was under way
+let lastPort = null; // the port that worked last time is tried first
 
 async function pairingCode() {
   return (await chrome.storage.local.get("code")).code || "";
 }
 
+// Try one port. Resolves to "connected", "wrong pairing code" or "no answer".
+function attempt(port, code) {
+  return new Promise((resolve) => {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws/browser?token=${encodeURIComponent(code)}`);
+    let opened = false, settled = false;
+    const settle = (outcome) => { if (!settled) { settled = true; resolve(outcome); } };
+    ws.onopen = () => { opened = true; };
+    ws.onerror = () => {};
+    ws.onmessage = async (event) => {
+      // The first message proves JARVIS accepted the pairing code.
+      if (!settled) { socket = ws; state = "connected"; lastPort = port; settle("connected"); }
+      const message = JSON.parse(event.data);
+      if (message.type === "ping" || message.type === "hello") { if (message.type === "ping") ws.send(JSON.stringify({ type: "pong" })); return; }
+      let reply;
+      try {
+        reply = { id: message.id, ok: true, result: await run(message.action, message.args || {}) };
+      } catch (error) {
+        reply = { id: message.id, ok: false, error: String((error && error.message) || error) };
+      }
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(reply));
+    };
+    ws.onclose = (event) => {
+      if (socket === ws) { socket = null; state = "JARVIS is not running"; }
+      settle(opened && event.code === 1008 ? "wrong pairing code" : "no answer");
+    };
+    // JARVIS is on this computer, so it answers at once or not at all.
+    setTimeout(() => { if (!settled) { try { ws.close(); } catch (_) {} settle("no answer"); } }, 1500);
+  });
+}
+
 async function connect() {
-  if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return;
+  if (trying) { again = true; return; }
+  if (socket && socket.readyState === WebSocket.OPEN) return;
   const code = await pairingCode();
   if (!code) { state = "not paired"; return; }
-  state = "connecting";
-  const ws = new WebSocket(`${ADDRESS}?token=${encodeURIComponent(code)}`);
-  socket = ws;
-  ws.onopen = () => { state = "connected"; };
-  ws.onclose = (event) => {
-    if (socket === ws) socket = null;
-    state = event.code === 1008 ? "wrong pairing code" : "JARVIS is not running";
-  };
-  ws.onerror = () => {};
-  ws.onmessage = async (event) => {
-    const message = JSON.parse(event.data);
-    if (message.type === "ping") { ws.send(JSON.stringify({ type: "pong" })); return; }
-    let reply;
-    try {
-      reply = { id: message.id, ok: true, result: await run(message.action, message.args || {}) };
-    } catch (error) {
-      reply = { id: message.id, ok: false, error: String((error && error.message) || error) };
+  trying = true;
+  if (state !== "wrong pairing code" && state !== "JARVIS is not running") state = "connecting";
+  try {
+    let outcome = "no answer";
+    const order = lastPort ? [lastPort, ...PORTS.filter((p) => p !== lastPort)] : PORTS;
+    for (const port of order) {
+      outcome = await attempt(port, code);
+      if (outcome !== "no answer") break;
     }
-    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(reply));
-  };
+    if (outcome === "wrong pairing code") state = "wrong pairing code";
+    else if (outcome === "no answer") state = "JARVIS is not running";
+  } finally {
+    trying = false;
+  }
+  if (again) { again = false; connect(); }
 }
 
 // Chrome puts background workers to sleep. An alarm wakes this one every
@@ -53,10 +84,10 @@ chrome.alarms.onAlarm.addListener(connect);
 chrome.runtime.onStartup.addListener(connect);
 chrome.runtime.onInstalled.addListener(connect);
 chrome.storage.onChanged.addListener((changes) => {
-  if (changes.code) { if (socket) socket.close(); socket = null; connect(); }
+  if (changes.code) { if (socket) socket.close(); socket = null; state = "connecting"; connect(); }
 });
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
-  if (message === "status") { connect().then(() => respond(state)); return true; }
+  if (message === "status") { connect(); respond(state); }
 });
 connect();
 

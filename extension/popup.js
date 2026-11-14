@@ -6,12 +6,12 @@ function show(state) {
     "connecting": "Connecting…",
     "not paired": "Not paired yet. Paste the pairing code below.",
     "wrong pairing code": "JARVIS did not accept that pairing code.",
-    "JARVIS is not running": "JARVIS is not running on this computer.",
+    "JARVIS is not running": "Cannot find JARVIS. Start JARVIS on this computer; this will connect by itself within half a minute.",
   }[state] || state;
   status.textContent = text;
   status.className = state === "connected" ? "good" : "bad";
 }
-function refresh() { chrome.runtime.sendMessage("status", (state) => show(state || "JARVIS is not running")); }
+function refresh() { chrome.runtime.sendMessage("status", (state) => show(state || "connecting")); }
 
 document.getElementById("save").onclick = async () => {
   await chrome.storage.local.set({ code: code.value.trim() });

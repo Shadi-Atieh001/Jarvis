@@ -38,7 +38,11 @@ from jarvis.scheduler.runner import Scheduler
 from jarvis.scheduler.store import describe_when
 from jarvis.voice.engine import Voice, VoiceUnavailable
 
-PREFERRED_PORT = 47821
+# JARVIS uses the first of these that is free. The browser extension tries
+# the same list (see extension/background.js), so the two always find each
+# other; if you change one list, change the other.
+PORTS = (47821, 47822, 47823, 47824)
+PREFERRED_PORT = PORTS[0]
 MAX_AUDIO_BYTES = 20_000_000  # about ten minutes of speech
 MAX_SPEAK_CHARS = 2000
 
@@ -117,6 +121,7 @@ def create_app(jarvis: Jarvis, token: str | None = None, make_agent=None) -> Fas
     app.state.windows = []  # the WebUI of each open window, newest last
     app.state.notify = None  # set by the tray icon: notify(title, text)
     app.state.restart = None  # set by the desktop window: restart()
+    app.state.port = PORTS[0]  # replaced by serve() with the real one
 
     # ---- the browser extension
 
@@ -131,12 +136,17 @@ def create_app(jarvis: Jarvis, token: str | None = None, make_agent=None) -> Fas
         import hmac
 
         origin = ws.headers.get("origin", "")
-        paired = hmac.compare_digest(ws.query_params.get("token", ""), bridge.code)
-        if not paired or not origin.startswith(("chrome-extension://", "moz-extension://")):
-            await ws.close(code=1008)
+        if not origin.startswith(("chrome-extension://", "moz-extension://")):
+            await ws.close(code=1008)  # a web page, not an extension: refuse outright
             return
         await ws.accept()
+        if not hmac.compare_digest(ws.query_params.get("token", ""), bridge.code):
+            # Accept and then close with a reason, so the extension can tell
+            # "wrong code" apart from "JARVIS is not running".
+            await ws.close(code=1008, reason="wrong pairing code")
+            return
         bridge.attach(ws, asyncio.get_running_loop())
+        await ws.send_json({"type": "hello"})  # tells the extension its code was accepted
         jarvis.log.record("browser", detail="extension connected")
 
         async def keep_awake() -> None:  # browsers put idle extensions to sleep
@@ -164,6 +174,8 @@ def create_app(jarvis: Jarvis, token: str | None = None, make_agent=None) -> Fas
 
         return {
             "connected": bridge.connected,
+            "port": getattr(app.state, "port", None),
+            "reachable": getattr(app.state, "port", PORTS[0]) in PORTS,
             "code": bridge.code,
             "approved_sites": sorted(jarvis.settings.approved_sites),
             "extension_folder": str(REPO_ROOT / "extension"),
@@ -683,7 +695,8 @@ def serve(jarvis: Jarvis, port: int = 0) -> tuple[threading.Thread, str, FastAPI
         # Use the same port every time if we can. The window remembers
         # permissions (such as the microphone) per address, so a port that
         # changed on every start would mean being asked on every start.
-        for candidate in (PREFERRED_PORT, 0):  # 0 asks the OS for any free port
+        candidates = (PREFERRED_PORT, *(p for p in PORTS if p != PORTS[0]), 0) if PREFERRED_PORT == PORTS[0] else (PREFERRED_PORT, 0)
+        for candidate in candidates:  # 0 asks the OS for any free port
             try:
                 with socket.socket() as s:
                     s.bind(("127.0.0.1", candidate))
@@ -692,6 +705,8 @@ def serve(jarvis: Jarvis, port: int = 0) -> tuple[threading.Thread, str, FastAPI
             except OSError:
                 continue
     app = create_app(jarvis)
+    app.state.port = port
+    jarvis.log.record("server", detail=f"listening on 127.0.0.1:{port}" + ("" if port in PORTS else " (not one of the usual ports; the browser extension cannot connect)"))
     app.state.scheduler.start()
     config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
     server = uvicorn.Server(config)

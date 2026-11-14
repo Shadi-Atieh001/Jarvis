@@ -419,7 +419,10 @@ dependable than working the browser window from outside.
    window under CONTROL > Accounts > Browser.
 
 The popup then says "Connected to JARVIS", and the Links widget in the
-window shows Browser lit. The extension talks only to JARVIS on your own
+window shows Browser lit. If it says it cannot find JARVIS, JARVIS is not
+running (or has only just started; it connects by itself within half a
+minute). After JARVIS updates, reload the extension with the round arrow on
+its card in the Extensions page, so it picks up any changes too. The extension talks only to JARVIS on your own
 computer, never to anything on the internet, and does nothing until paired.
 Chrome may occasionally remind you that a developer-mode extension is
 installed; that is expected for an extension not from the store.
@@ -458,7 +461,8 @@ Things to understand about these rules:
 Limits: it reads the main page only, not content inside embedded frames;
 some unusual sites build their controls in ways it cannot see, and for
 those JARVIS falls back to [Sight](#sight) and the screen tools; and it
-needs JARVIS to be on its usual address (port 47821).
+looks for JARVIS on ports 47821 to 47824 only. CONTROL > Accounts > Browser
+shows the port in use.
 
 ## Sight
 

@@ -1115,8 +1115,13 @@ const panel = {
     const b = await this.json("/api/browser");
     const row = el("div", "row"), text = el("div", "grow", "Browser (Chrome or Edge)");
     row.append(el("span", "tag" + (b.connected ? " good" : ""), b.connected ? "Connected" : "Not connected"), text);
+    if (!b.reachable) {
+      const warn = el("small", "", `JARVIS is on port ${b.port} this time, which the extension does not look for (ports 47821 to 47824 were all in use). Quit JARVIS completely from the tray icon, make sure no other copy is running, and start it again.`);
+      warn.style.color = "var(--warn)";
+      text.appendChild(warn);
+    }
     if (!b.connected) {
-      text.appendChild(el("small", "", "Lets JARVIS read and work web pages in your own browser. To set up, once:"));
+      text.appendChild(el("small", "", `JARVIS is listening on port ${b.port}. Lets JARVIS read and work web pages in your own browser. To set up, once:`));
       [
         "1. In Chrome or Edge, open the Extensions page and switch on Developer mode.",
         "2. Click \"Load unpacked\" and choose this folder:",

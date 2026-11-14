@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.14.1 — Browser extension connection fixes (2026-11-14)
+
+Fixed
+- The extension's popup said "Connecting…" forever when it could not reach
+  JARVIS. It now says what is wrong: JARVIS not found, or a wrong pairing
+  code.
+- JARVIS and the extension now agree on a short list of ports (47821 to
+  47824) instead of one, so they still find each other when the first is
+  taken, for example by a copy of JARVIS that has not finished closing.
+- A newly pasted pairing code is tried at once.
+
+Added
+- CONTROL > Accounts > Browser shows which port JARVIS is on, and warns if
+  it is one the extension cannot reach. The port is also written to the
+  action log at start.
+
+After updating, reload the extension: on the browser's Extensions page,
+click the round arrow on the JARVIS card.
+
 ## 0.14.0 — JARVIS in your browser; sight on its own judgment (2026-11-14)
 
 Added

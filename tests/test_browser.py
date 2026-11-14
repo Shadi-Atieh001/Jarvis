@@ -227,11 +227,13 @@ def test_extension_must_be_paired_and_be_an_extension(make_jarvis):
     code = bridge.code
     assert len(code) >= 20 and bridge.code == code  # made once, then kept
     for token, origin in [("wrong", "chrome-extension://abc"), (code, "http://evil.example"), (code, "http://testserver"), ("", "chrome-extension://abc")]:
-        with pytest.raises(WebSocketDisconnect):
+        with pytest.raises(WebSocketDisconnect) as refused:
             with c.websocket_connect(f"/ws/browser?token={token}", headers={"origin": origin}) as ws:
                 ws.receive_json()
+        assert refused.value.code == 1008
     assert not bridge.connected
-    with c.websocket_connect(f"/ws/browser?token={code}", headers={"origin": "chrome-extension://abc"}):
+    with c.websocket_connect(f"/ws/browser?token={code}", headers={"origin": "chrome-extension://abc"}) as ws:
+        assert ws.receive_json() == {"type": "hello"}
         import time
 
         for _ in range(100):
@@ -250,6 +252,7 @@ def test_bridge_round_trip(make_jarvis):
     app = server.create_app(j, token="tok")
     bridge, c = app.state.browser, TestClient(app)
     with c.websocket_connect(f"/ws/browser?token={bridge.code}", headers={"origin": "chrome-extension://abc"}) as ws:
+        assert ws.receive_json() == {"type": "hello"}
         result = []
         worker = threading.Thread(target=lambda: result.append(bridge.call("tabs")))
         worker.start()
@@ -307,6 +310,7 @@ def test_browser_panel_endpoints(make_jarvis):
     assert c.get("/api/browser").status_code == 403 and c.post("/api/browser/sites", json={"site": "x.com"}).status_code == 403
     state = c.get("/api/browser", headers=HEADERS).json()
     assert state["connected"] is False and len(state["code"]) >= 20 and state["extension_folder"].endswith("extension")
+    assert state["port"] == 47821 and state["reachable"] is True
     r = c.post("/api/browser/sites", headers=HEADERS, json={"site": "web.whatsapp.com"})
     assert r.json() == {"approved_sites": ["web.whatsapp.com"]}
     assert c.post("/api/browser/sites", headers=HEADERS, json={"site": "not a site"}).status_code == 400
@@ -323,5 +327,10 @@ def test_extension_files_are_shipped():
     for name in ("background.js", "page.js", "popup.html", "popup.js", "icon16.png", "icon48.png", "icon128.png"):
         assert (REPO_ROOT / "extension" / name).exists(), name
     worker = (REPO_ROOT / "extension" / "background.js").read_text()
-    assert "ws://127.0.0.1:47821/ws/browser" in worker  # it talks only to JARVIS on this computer
-    assert "https://" not in worker and "http://" not in worker.replace("ws://127.0.0.1", "")
+    assert "ws://127.0.0.1:${port}/ws/browser" in worker  # it talks only to JARVIS on this computer
+    assert "https://" not in worker and "http://" not in worker
+    # The extension and the server must look for each other on the same ports.
+    import re
+
+    listed = [int(n) for n in re.search(r"const PORTS = \[([\d, ]+)\]", worker).group(1).split(",")]
+    assert tuple(listed) == server.PORTS
