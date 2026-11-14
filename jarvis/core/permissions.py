@@ -14,10 +14,12 @@ Modes ([permissions] mode in settings.toml):
   trusted       everything runs without asking except deleting and sending.
                 After a web page or outside file has been read, anything
                 that changes, runs or controls something asks for the rest
-                of that request.
-  unrestricted  nothing asks
-Blocked patterns, and anything a tool marks as blocked (such as typing a
-payment card number), are refused in every mode.
+                of that request, except on websites and in apps the user
+                has approved.
+  unrestricted  nothing asks, with one exception: acting on a banking,
+                payment or finance site or app always asks.
+In every mode, blocked patterns and anything a tool marks as blocked (such
+as typing a payment card number or into a password field) are refused.
 
 A per-tool entry under [permissions.tools] overrides the mode for that tool.
 """
@@ -101,15 +103,18 @@ class PermissionGate:
             try:
                 raised = tool.escalate(args, ctx)
                 why = "this particular call is riskier than usual"
+                always = False
                 if isinstance(raised, tuple):
-                    strict = len(raised) > 2 and raised[2] == "strict"
+                    strict = len(raised) > 2 and raised[2] in ("strict", "always")
+                    always = len(raised) > 2 and raised[2] == "always"
                     if len(raised) > 3 and isinstance(raised[3], dict):
                         offer_site = raised[3].get("offer_site")
                     raised, why = raised[0], raised[1]
             except Exception as exc:  # a broken hook must fail safe
-                raised, why = CONFIRM, f"could not assess the risk ({exc})"
+                raised, why, always = CONFIRM, f"could not assess the risk ({exc})", False
             applies = (
                 raised == BLOCKED
+                or always  # banking and finance: asked about in every mode
                 or mode == "careful"
                 or (mode == "trusted" and strict)
             )

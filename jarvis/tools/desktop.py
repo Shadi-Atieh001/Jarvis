@@ -22,7 +22,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from jarvis.core.tools import AUTO, BLOCKED, ToolContext, ToolResult, tool
+from jarvis.core.tools import AUTO, BLOCKED, CONFIRM, ToolContext, ToolResult, tool
 
 MAX_ELEMENTS = 350
 MAX_SCREEN_CHARS = 14_000
@@ -76,6 +76,29 @@ def _backend():
             raise DesktopUnavailable("Screen reading and mouse/keyboard control only work on Windows.")
         _backend_instance = WindowsBackend()
     return _backend_instance
+
+
+def _finance_rule(app_of):
+    """Mouse and keyboard actions in a banking or finance app (or a browser
+    window showing a payment page) ask first, in every permission mode."""
+
+    def check(args: dict, ctx: ToolContext):
+        if looks_like_card_number(str(args.get("text", ""))):
+            return BLOCKED, "it looks like a payment card number, which JARVIS never enters"
+        try:
+            title = getattr(_backend(), "target_title", lambda: "")() or ""
+        except Exception:
+            title = ""
+        subject = f"{app_of(args, ctx) or ''} {title}"
+        for pattern in ctx.settings.always_ask_sites:
+            try:
+                if re.search(pattern, subject, re.IGNORECASE):
+                    return CONFIRM, f'"{title.strip() or subject.strip()}" looks like a banking or finance app, which always asks', "always"
+            except re.error:
+                continue
+        return None
+
+    return check
 
 
 def _unavailable(exc: Exception) -> ToolResult:
@@ -219,6 +242,10 @@ def open_app(args: dict, ctx: ToolContext) -> ToolResult:
     try:
         if sys.platform == "win32":
             os.startfile(target)  # opens it the way a double-click would
+            try:  # the app just opened is now the one to work in
+                _backend().forget_target()
+            except Exception:
+                pass
         else:
             subprocess.Popen(["xdg-open" if sys.platform.startswith("linux") else "open", target])
     except OSError as exc:
@@ -271,6 +298,7 @@ def focus_window(args: dict, ctx: ToolContext) -> ToolResult:
     tier=AUTO,
     kind="control",
     target_app=_app_for_click,
+    escalate=_finance_rule(_app_for_click),
     describe=lambda a, c: _describe_click(a),
 )
 def click(args: dict, ctx: ToolContext) -> ToolResult:
@@ -326,12 +354,6 @@ def looks_like_card_number(text: str) -> bool:
     return False
 
 
-def _escalate_typing(args: dict, ctx: ToolContext):
-    if looks_like_card_number(args.get("text", "")):
-        return BLOCKED, "it looks like a payment card number, which JARVIS never enters"
-    return None
-
-
 @tool(
     name="type_text",
     description=(
@@ -350,7 +372,7 @@ def _escalate_typing(args: dict, ctx: ToolContext):
     tier=AUTO,
     kind="control",
     target_app=_front_app,
-    escalate=_escalate_typing,
+    escalate=_finance_rule(_front_app),
     describe=lambda a, c: f"Type this text{' and press Enter' if a.get('press_enter') else ''}:\n\n{a['text']}",
 )
 def type_text(args: dict, ctx: ToolContext) -> ToolResult:
@@ -385,6 +407,7 @@ def type_text(args: dict, ctx: ToolContext) -> ToolResult:
     tier=AUTO,
     kind="control",
     target_app=_front_app,
+    escalate=_finance_rule(_front_app),
     describe=lambda a, c: f"Press {a['keys']}",
 )
 def press_keys(args: dict, ctx: ToolContext) -> ToolResult:
@@ -462,6 +485,7 @@ class WindowsBackend:
 
     def __init__(self):
         self.last_app: str | None = None  # the app of the latest snapshot
+        self.last_window = None  # the window JARVIS is working in
         try:
             import pywinauto  # noqa: F401
         except ImportError:
@@ -485,9 +509,56 @@ class WindowsBackend:
         return result
 
     def _foreground_handle(self) -> int:
+        """The window in front, not counting JARVIS's own. When you type a
+        request or click a button in JARVIS, its window is in front, but the
+        window you mean is the one behind it."""
         import ctypes
+        from ctypes import wintypes
 
-        return ctypes.windll.user32.GetForegroundWindow()
+        user32 = ctypes.windll.user32
+        handle = user32.GetForegroundWindow()
+        for _ in range(60):
+            if not handle:
+                break
+            owner = wintypes.DWORD()
+            user32.GetWindowThreadProcessId(handle, ctypes.byref(owner))
+            if owner.value != os.getpid() and user32.IsWindowVisible(handle) and not user32.IsIconic(handle) and user32.GetWindowTextLengthW(handle) > 0:
+                return handle
+            handle = user32.GetWindow(handle, 2)  # 2 = the next window down
+        return 0
+
+    def _is_ours(self, window) -> bool:
+        try:
+            return window.process_id() == os.getpid()
+        except Exception:
+            return False
+
+    def forget_target(self) -> None:
+        self.last_window = None
+
+    def target_title(self) -> str:
+        """The title of the window that clicks and keystrokes will go to."""
+        try:
+            return (self.last_window or self._find(None)).window_text()
+        except Exception:
+            return ""
+
+    def _aim(self) -> None:
+        """Before any click or keystroke, make sure the app JARVIS is
+        working in is in front. Otherwise, if JARVIS's own window has the
+        focus (because you just typed a request or clicked a button in it),
+        the typing would land in JARVIS's own message box."""
+        try:
+            import ctypes
+
+            target = self.last_window or self._find(None)
+            if ctypes.windll.user32.GetForegroundWindow() != target.handle:
+                if target.is_minimized():
+                    target.restore()
+                target.set_focus()
+                time.sleep(0.3)  # let Windows finish switching
+        except Exception:
+            pass  # best effort; the action itself reports any failure
 
     def _find(self, title: str | None):
         windows = self._visible_windows()
@@ -496,9 +567,10 @@ class WindowsBackend:
             for w in windows:
                 if w.handle == handle:
                     return w
-            if windows:
-                return windows[0]
-            raise DesktopUnavailable("No window is open.")
+            others = [w for w in windows if not self._is_ours(w)]
+            if others:
+                return others[0]
+            raise DesktopUnavailable("No other window is open.")
         wanted = title.lower()
         matches = [w for w in windows if wanted in w.window_text().lower()]
         if not matches:
@@ -522,7 +594,7 @@ class WindowsBackend:
 
     def front_app(self) -> str | None:
         try:
-            return self._app_of(self._find(None))
+            return self._app_of(self.last_window or self._find(None))
         except DesktopUnavailable:
             return None
 
@@ -534,6 +606,7 @@ class WindowsBackend:
 
     def snapshot(self, title: str | None) -> tuple[str, list[Element]]:
         window = self._find(title)
+        self.last_window = window  # clicks and typing will go to this window
         self.last_app = self._app_of(window)
         info = window.element_info
         walker = info.iter_descendants() if hasattr(info, "iter_descendants") else iter(info.descendants())
@@ -571,11 +644,13 @@ class WindowsBackend:
             window.set_focus()
         except Exception as exc:
             raise DesktopUnavailable(f"Could not bring that window to the front: {exc}") from None
+        self.last_window = window
         return window.window_text()
 
     def click(self, x: int, y: int, button: str, double: bool) -> None:
         from pywinauto import mouse
 
+        self._aim()
         if double:
             mouse.double_click(button=button, coords=(x, y))
         else:
@@ -584,9 +659,11 @@ class WindowsBackend:
     def type_text(self, text: str) -> None:
         from pywinauto import keyboard
 
+        self._aim()
         keyboard.send_keys(escape_text(text), with_spaces=True, with_tabs=True, with_newlines=True, pause=0.01)
 
     def press(self, combo: str) -> None:
         from pywinauto import keyboard
 
+        self._aim()
         keyboard.send_keys(to_send_keys(combo), pause=0.05)

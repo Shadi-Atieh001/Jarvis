@@ -442,7 +442,8 @@ does whatever a task needs on that site without asking again. Approved
 sites are listed, and can be removed or added, under CONTROL > Accounts >
 Browser. Approving `example.com` also covers `shop.example.com`. In
 Careful mode every click and keystroke asks; in Unrestricted mode nothing
-asks, though passwords and card details remain blocked.
+asks except on banking and payment sites, and passwords and card details
+remain blocked.
 
 Things to understand about these rules:
 
@@ -798,7 +799,7 @@ without asking:
 |---|---|---|
 | `careful` | Reading; new files in the workspace | Everything else |
 | `trusted` (default) | Commands, code, files anywhere, opening apps, clicking and typing | Deleting files; sending email, invitations and public posts through JARVIS's own connections; and see "after reading the web" below |
-| `unrestricted` | Everything | Nothing |
+| `unrestricted` | Everything | Only actions on a banking, payment or finance site or app |
 
 In every mode:
 
@@ -807,10 +808,27 @@ In every mode:
   that looks like a payment card number. The command patterns are a
   backstop rather than a guarantee; a determined attacker could word a
   command to slip past them.
+- **Banking and finance always ask.** Clicking or typing on a banking or
+  payment website, in a desktop app whose name or window title looks like
+  one (a bank, PayPal, a crypto exchange), or in a browser window showing
+  a checkout or payment page, asks first even in `unrestricted`. They are
+  recognised by the words under `[browser] always_ask` in `settings.toml`;
+  add your own bank's name there if it is not caught.
 - **Sensitive paths** (`.ssh`, `.env`, browser profiles, key files; see
   `[permissions.sensitive]`) need confirmation to read or write, except in
   `unrestricted`.
 - **The Stop button works.**
+
+**Unrestricted mode is exactly that.** Nothing is shown to you before it
+happens: messages are sent, files deleted and commands run on JARVIS's own
+judgement, including straight after it has read a web page that might
+contain hidden instructions. Choose it under CONTROL > Settings if that is
+the trade you want; the Stop button and the Activity log are your checks.
+
+**Typing goes to the app, not to JARVIS.** When JARVIS clicks or types on
+the desktop it first brings the window it was working in back to the
+front, so answering a question in JARVIS's own window (or typing your
+request there) does not make it type into itself.
 
 **After reading the web (trusted mode).** A web page, a search result or a
 file from outside the workspace can contain hidden text written to

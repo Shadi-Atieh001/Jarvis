@@ -427,7 +427,7 @@
       <select id="s-mode">
         <option value="careful">Careful: asks before changing, deleting or running anything (recommended to start)</option>
         <option value="trusted">Trusted: asks only before deleting or sending</option>
-        <option value="unrestricted">Unrestricted: never asks</option>
+        <option value="unrestricted">Unrestricted: never asks, except for banking and finance</option>
       </select>
     </div>
     <p id="setup-error" role="alert"></p>
@@ -612,7 +612,6 @@ function showConfirm(m) {
     const target = m.offer_site || m.offer_app_label;
     row.replaceWith(el("div", "verdict", approveSite ? `You approved this, and ${target} from now on.` : approved ? "You approved this." : "You refused this."));
     awaitingApproval = Math.max(0, awaitingApproval - 1); refreshMode();
-    input.focus();
   };
   yes.onclick = () => answer(true);
   no.onclick = () => answer(false);
@@ -1297,7 +1296,7 @@ const panel = {
     group("How much JARVIS may do without asking", "permission_mode", [
       ["careful", "Careful", "Asks before overwriting, deleting, running commands, or touching anything outside its workspace."],
       ["trusted", "Trusted", "Asks only before deleting or sending, and before acting on something it has just read on the web or in an email."],
-      ["unrestricted", "Unrestricted", "Never asks. A web page or email with hidden instructions could make it act unseen."],
+      ["unrestricted", "Unrestricted", "Never asks, except on banking, payment and finance sites and apps. A web page or email with hidden instructions could make it act unseen."],
     ]);
     group("Answer aloud", "speak_replies", [
       ["when_spoken", "When I speak", "Speaks only when you spoke to it. Typed messages stay silent."],

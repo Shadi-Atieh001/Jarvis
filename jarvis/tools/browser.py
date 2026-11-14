@@ -76,7 +76,7 @@ def _rule(args: dict, ctx: ToolContext):
         return BLOCKED, "it involves payment card details, which JARVIS never enters"
     url = page["url"]
     if always_asks(ctx.settings, url):
-        return CONFIRM, f"{site_of(url)} looks like a banking or payment site, which always asks", "strict"
+        return CONFIRM, f"{site_of(url)} looks like a banking or payment site, which always asks", "always"
     if not is_approved(ctx.settings, url):
         return CONFIRM, f"{site_of(url)} is not an approved site", "strict", {"offer_site": site_of(url)}
     return None  # an approved site: go ahead with whatever is needed

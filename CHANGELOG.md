@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.16.0 — Unrestricted means no questions, except banking (2026-11-14)
+
+Changed
+- Unrestricted mode now asks nothing at all, with one exception: clicking
+  or typing on a banking, payment or finance website, or in a desktop app
+  or browser window that looks like one, always asks, in every mode.
+  Passwords, card numbers and blocked system commands are still refused.
+
+Fixed
+- JARVIS typed messages into its own input box. After you answered a
+  question (or typed a request) JARVIS's window was in front, so the
+  keystrokes landed there. It now remembers the window it was working in,
+  ignores its own window, and brings the right one forward before every
+  click and keystroke. Answering a question no longer moves the cursor
+  into JARVIS's input box either.
+
+Not yet verified
+- The window handling is Windows-only code and has not been run on a real
+  Windows machine yet.
+
 ## 0.15.0 — One approval per site or app (2026-11-14)
 
 Changed

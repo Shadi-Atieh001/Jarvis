@@ -434,3 +434,50 @@ def test_approving_an_app_from_the_prompt_and_the_panel(make_jarvis, monkeypatch
     assert state["approved_apps"] == [{"name": "WhatsApp.exe", "label": "WhatsApp"}]
     assert c.post("/api/browser/apps", headers=HEADERS, json={"app": "WhatsApp.exe", "approved": False}).json() == {"approved_apps": []}
     assert c.post("/api/browser/apps", json={"app": "x"}).status_code == 403
+
+
+# ------------------------------------- unrestricted, except banking and finance
+
+
+def test_unrestricted_asks_nothing_except_for_banking_and_finance(settings, registry, ctx, browser, monkeypatch):
+    from jarvis.tools import desktop
+
+    from .test_web_desktop import FakeDesktop
+
+    settings.permission_mode = "unrestricted"
+    gate = PermissionGate(settings)
+    gate.note_untrusted()  # even straight after reading a web page
+    tier = lambda name, **a: gate.decide(registry.get(name), a, ctx)  # noqa: E731
+
+    # Everyday things: no questions at all, on sites nobody has approved.
+    run(registry, ctx, "browser_read")
+    for name, args in [("browser_click", {"ref": 4}), ("browser_type", {"ref": 3, "text": "hi", "submit": True}), ("run_command", {"command": "echo hi"}),
+                       ("delete_file", {"path": "x.txt"}), ("gmail_send", {"to": "a@b.com", "body": "hi"}), ("look_at_screen", {"question": "x"})]:
+        assert tier(name, **args).tier == AUTO, name
+
+    # A banking or payment website: asks.
+    browser.url = "https://www.mybank.example/transfer"
+    run(registry, ctx, "browser_read")
+    d = tier("browser_click", ref=1)
+    assert d.tier == CONFIRM and "banking or payment" in d.reason
+    assert tier("browser_read").tier == AUTO  # looking is still free
+
+    # A banking or finance desktop app, or a browser window on a payment page: asks.
+    backend = FakeDesktop()
+    monkeypatch.setattr(desktop, "_backend", lambda: backend)
+    for app, title, expected in [
+        ("WhatsApp.exe", "WhatsApp", AUTO),
+        ("notepad.exe", "Untitled - Notepad", AUTO),
+        ("chrome.exe", "Checkout - Example Store - Google Chrome", CONFIRM),
+        ("msedge.exe", "PayPal: Send money - Microsoft Edge", CONFIRM),
+        ("Binance.exe", "Binance", CONFIRM),
+        ("ApplicationFrameHost.exe|My Bank", "My Bank", CONFIRM),
+    ]:
+        backend.front_app = lambda app=app: app
+        backend.target_title = lambda title=title: title
+        assert tier("type_text", text="hello").tier == expected, (app, title)
+        assert tier("press_keys", keys="enter").tier == expected, app
+
+    # And these are refused outright, as in every mode.
+    assert tier("type_text", text="4111 1111 1111 1111").tier == BLOCKED
+    assert tier("run_command", command="netsh advfirewall set allprofiles state off").tier == BLOCKED

@@ -78,8 +78,10 @@ api_key_env = "JARVIS_API_KEY"
 # site from the permission prompt ("Yes, and always on this site") or list
 # it here, e.g. approved_sites = ["web.whatsapp.com"].
 approved_sites = []
-# Websites matching any of these (case-insensitive regex, tested against the
-# whole address) ALWAYS ask before JARVIS acts, even if approved.
+# Banking, payment and finance. Anything matching one of these
+# (case-insensitive regex) ALWAYS asks before JARVIS acts, in every
+# permission mode, even "unrestricted". They are tested against a website's
+# whole address, and against a desktop app's name and window title.
 always_ask = [
     'bank', 'paypal', 'stripe\.com', 'wise\.com', 'revolut', 'payoneer', 'venmo', 'cash\.app',
     'binance', 'coinbase', 'kraken\.com', 'crypto', 'wallet', 'broker', 'trading',
@@ -157,7 +159,8 @@ workspace = "~/.jarvis/workspace"
 #                   a web page or a file from outside the workspace, it also
 #                   asks before changing, running or controlling anything
 #                   for the rest of that request (see below).
-#   "unrestricted"  never asks
+#   "unrestricted"  never asks, except before acting on a banking, payment
+#                   or finance site or app (see [browser] always_ask)
 # In every mode: blocked commands stay blocked, sensitive files are
 # protected, and the Stop button works.
 mode = "trusted"
